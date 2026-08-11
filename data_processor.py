@@ -1,4 +1,4 @@
-from data_scrapper_day_aggregate import data_scrapper
+from data_scrapper_per_ticker import data_scrapper
 import pandas as pd 
 
 # Cameron-Lizares Screener -> Volume > 5xAvg Volume, Last$ = 1-20, Gap% > 0
