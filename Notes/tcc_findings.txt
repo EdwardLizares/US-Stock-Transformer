@@ -1,0 +1,40 @@
+Today's Closing Classifier (TCC)
+-- Given today's statistics, what is the closing value
+
+Summary: RelVolume, Gap%, Open Not enough information, need more from previous days probably
+Hyperparameter Effectiveness (2025 Data)
+["RelVolume", "Gap%", "Open", "High", "Low", "NumTrades"] --> ["Outcome"]:
+    Logistic Regression: 
+        Train Model: 83.1%
+        Train Baseline: 56.3%
+        Test Model: 84.2%
+        Test Baseline: 57.3%
+    Random Forests Classifier:
+        Train Model: 99.9%
+        Train Baseline: 53.0%
+        Test Model: 72.8%
+        Test Baseline: 55.3%
+
+["RelVolume", "Gap%", "Open", "Low"] --> ["Outcome"]:
+    Logistic Regression: 
+        Train Model: 71.8%
+        Train Baseline: 66%
+        Test Model: 72.5%
+        Test Baseline: 65.3%
+    Random Forests Classifier:
+        Train Model: 100%
+        Train Baseline: 53.1%
+        Test Model: 69.3%
+        Test Baseline: 56.3%
+
+["RelVolume", "Gap%", "Open"] --> ["Outcome"]
+    Logistic Regression: 
+        Train Model: 58.4%
+        Train Baseline: 67.1%
+        Test Model: 57%
+        Test Baseline: 63.7%
+    Random Forests Classifier:
+        Train Model: 71.9%
+        Train Baseline: 60.0%
+        Test Model: 57.2%
+        Test Baseline: 57.5%

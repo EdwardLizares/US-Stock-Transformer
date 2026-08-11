@@ -1,0 +1,6 @@
+Nxet Day Opening Classifier (NDOC)
+-- Given today's statistics, what is tomorrow's opening higher than today's close
+
+Basically, all classifiers did ~57-58% in testing compared to ~50% baseline. 
+
+Now moving into transformer, first taking hourly data per ticker in 2025
