@@ -7,22 +7,16 @@ import pandas_market_calendars as mcal
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
 
-API_KEY = "sdpbiDy3nfhuvQX2SBBtL6Gt2dl88ZrU"
-DATE_RANGE = mcal.get_calendar("NYSE").schedule("2025-01-01","2025-12-31").index
-TIMEFRAME = "1/hour"
-MN = 1
-MX = 30
-FILE_PATH_GET_ALL_TICKERS = "raw_data/all_tickers"
-file_path_filtered_ticker = "raw_data/all_tickers_trimmed_1_30"
-file_path_data_scrapper = "raw_data/data_1hour_2025.parquet"
+from setup import API_KEY, DATE_RANGE, TIMEFRAME, MN, MX
+from setup import path_raw_all_tickers, path_raw_tickers_trimmed, path_data_scrapper
 
-def get_all_tickers(path: str) -> list[str]:
+def get_all_tickers(path: str, api_key: str) -> list[str]:
     try:
         with open(path, "r") as f:
             return json.load(f)
     except FileNotFoundError as _:
         tickers = []
-        url = f"https://api.massive.com/v3/reference/tickers?market=stocks&active=true&limit=1000&apiKey={API_KEY}"
+        url = f"https://api.massive.com/v3/reference/tickers?market=stocks&active=true&limit=1000&apiKey={api_key}"
 
         while url:
             response = requests.get(url, timeout=30)
@@ -32,18 +26,18 @@ def get_all_tickers(path: str) -> list[str]:
             tickers.extend([r["ticker"] for r in resp.get("results", [])])
 
             next_url = resp.get("next_url")
-            url = f"{next_url}&apiKey={API_KEY}" if next_url else None
+            url = f"{next_url}&apiKey={api_key}" if next_url else None
 
         with open(path, "w", encoding='utf-8') as f:
             json.dump(tickers, f)
             return tickers
 
-def gen_aggregate_url(date: str):
-    return f"https://api.massive.com/v2/aggs/grouped/locale/us/market/stocks/{date}?apiKey={API_KEY}"
+def gen_aggregate_url(api_key: str, date: str):
+    return f"https://api.massive.com/v2/aggs/grouped/locale/us/market/stocks/{date}?apiKey={api_key}"
 
-def gen_range_url(ticker: str, bar_width: str, d_stt, d_end):
+def gen_range_url(api_key: str, ticker: str, bar_width: str, d_stt, d_end):
     return (f"https://api.massive.com/v2/aggs/ticker/{ticker}/range/{bar_width}/"
-           f"{d_stt}/{d_end}?adjusted=true&sort=asc&limit=50000&apiKey={API_KEY}")
+           f"{d_stt}/{d_end}?adjusted=true&sort=asc&limit=50000&apiKey={api_key}")
 
 def data_scrapper_unit(url: str, max_retries: int = 2):
     t0, t1 = time.time(), 0
@@ -63,11 +57,11 @@ def data_scrapper_unit(url: str, max_retries: int = 2):
             t_fail = time.time()
             return (False, pd.DataFrame(), t_fail - t0)
 
-def aggregate_scrapper_unit(date: str) -> tuple[bool, pd.DataFrame, int]:
-    return data_scrapper_unit(gen_aggregate_url(date))
+def aggregate_scrapper_unit(api_key: str, date: str) -> tuple[bool, pd.DataFrame, int]:
+    return data_scrapper_unit(gen_aggregate_url(api_key, date))
 
-def range_scrapper_unit(tkr: str, date_range: pd.DatetimeIndex, bar_width: str) -> tuple[bool, pd.DataFrame, int]:
-    return data_scrapper_unit(gen_range_url(tkr, bar_width, date_range[0].strftime("%Y-%m-%d"), date_range[-1].strftime("%Y-%m-%d")))
+def range_scrapper_unit(api_key: str, tkr: str, date_range: pd.DatetimeIndex, bar_width: str) -> tuple[bool, pd.DataFrame, int]:
+    return data_scrapper_unit(gen_range_url(api_key, tkr, bar_width, date_range[0].strftime("%Y-%m-%d"), date_range[-1].strftime("%Y-%m-%d")))
 
 def filter_ticker_list_by_price_range(path: str, date_range: pd.DatetimeIndex,
                                       mn: int, mx: int) -> list[str]:
@@ -103,8 +97,8 @@ def filter_ticker_list_by_price_range(path: str, date_range: pd.DatetimeIndex,
         json.dump(trimmed_tickers, f)
         return trimmed_tickers
 
-def data_scrapper(path: str, ticker_list, date_range: pd.DatetimeIndex,
-                  bar_width: str) -> pd.DataFrame:
+def data_scrapper(source_path: str, output_path: str, ticker_list, 
+                  date_range: pd.DatetimeIndex, bar_width: str) -> pd.DataFrame:
     """
     Iterates through all ticker_list x data_range combinations given bar_width (str)
     Returns a dataframe of all the raw data scraped from Massive
@@ -140,16 +134,17 @@ def data_scrapper(path: str, ticker_list, date_range: pd.DatetimeIndex,
     return data
 
 if __name__ == "__main__":
-    all_tickers = get_all_tickers(FILE_PATH_GET_ALL_TICKERS)
+    all_tickers = get_all_tickers(path_raw_all_tickers, API_KEY)
     print(len(all_tickers))
-    all_tickers_trimmed = filter_ticker_list_by_price_range(file_path_filtered_ticker,
+    all_tickers_trimmed = filter_ticker_list_by_price_range(path_raw_tickers_trimmed,
                                                             DATE_RANGE,
                                                             MN,
                                                             MX)
     print(len(all_tickers_trimmed))
-    ds = data_scrapper(file_path_data_scrapper, 
+    ds = data_scrapper(path_raw_tickers_trimmed,
+                       path_data_scrapper, 
                        all_tickers_trimmed, 
                        DATE_RANGE,
                        TIMEFRAME)
     print(ds)
-    ds.to_parquet(f"{file_path_data_scrapper}", index=False)
+    ds.to_parquet(f"{path_data_scrapper}", index=False)
