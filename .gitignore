@@ -1,3 +1,4 @@
 raw_data/
-processed_data/
+filled_raw_data/
+preprocessed_data/
 __pycache__/

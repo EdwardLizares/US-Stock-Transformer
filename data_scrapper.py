@@ -2,7 +2,6 @@ import requests
 import json
 import pandas as pd
 import time
-import pandas_market_calendars as mcal
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
@@ -97,14 +96,14 @@ def filter_ticker_list_by_price_range(path: str, date_range: pd.DatetimeIndex,
         json.dump(trimmed_tickers, f)
         return trimmed_tickers
 
-def data_scrapper(source_path: str, output_path: str, ticker_list, 
+def data_scrapper(output_path: str, ticker_list,
                   date_range: pd.DatetimeIndex, bar_width: str) -> pd.DataFrame:
     """
-    Iterates through all ticker_list x data_range combinations given bar_width (str)
-    Returns a dataframe of all the raw data scraped from Massive
+    Returns a DataFrame of all the raw data scraped from Massive
+    Creates a .parquet of the DataFrame on first run
     """
     try:
-        return pd.read_parquet(path)
+        return pd.read_parquet(output_path)
     except FileNotFoundError as _:
         pass
     s, f, avg_rqt, n = 0, 0, 0, len(ticker_list)
@@ -131,6 +130,7 @@ def data_scrapper(source_path: str, output_path: str, ticker_list,
                                       f"OHLC bars for {tkr} from {d_stt}-{d_end} added".ljust(80)))
 
     pbar.set_description_str("Data fetching completed")
+    data.to_parquet(f"{output_path}", index=False)
     return data
 
 if __name__ == "__main__":
@@ -141,10 +141,8 @@ if __name__ == "__main__":
                                                             MN,
                                                             MX)
     print(len(all_tickers_trimmed))
-    ds = data_scrapper(path_raw_tickers_trimmed,
-                       path_data_scrapper, 
-                       all_tickers_trimmed, 
+    ds = data_scrapper(path_data_scrapper,
+                       all_tickers_trimmed,
                        DATE_RANGE,
                        TIMEFRAME)
     print(ds)
-    ds.to_parquet(f"{path_data_scrapper}", index=False)
