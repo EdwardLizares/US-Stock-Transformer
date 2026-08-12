@@ -96,8 +96,8 @@ def filter_ticker_list_by_price_range(path: str, date_range: pd.DatetimeIndex,
         json.dump(trimmed_tickers, f)
         return trimmed_tickers
 
-def data_scrapper(output_path: str, ticker_list,
-                  date_range: pd.DatetimeIndex, bar_width: str) -> pd.DataFrame:
+def data_scrapper(output_path: str, 
+                  ticker_list: list, date_range: pd.DatetimeIndex, bar_width: str) -> pd.DataFrame:
     """
     Returns a DataFrame of all the raw data scraped from Massive
     Creates a .parquet of the DataFrame on first run

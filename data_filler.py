@@ -9,23 +9,11 @@ def get_unix_timestamps(date_range: pd.DatetimeIndex, bar_width):
         f"{date} {time}"
         for date in date_range.strftime("%Y-%m-%d")
         for time in pd.date_range(
-                        f"09:30",
+                        f"09:45",
                         f"16:00",
                         freq=f"{bar_width}min"
                     ).strftime("%H:%M")
         ], format="%Y-%m-%d %H:%M").tz_localize("America/New_York").as_unit("ms").astype("int64")
-
-def fill_raw_data(path: str) -> pd.DataFrame:
-    """
-    Returns a DataFrame with forward/back filled data for all possible timestamps
-    Creates a .parquet of the DataFrame on first run
-    """
-    print("Reading source path parquet...")
-    df = pd.read_parquet(path)
-    df = df.set_index(["T", "t"])
-    df = forward_back_fill(df, DATE_RANGE, BAR_WIDTH)
-    df.to_parquet(path_data_filler, index=False)
-    return df
 
 def forward_back_fill(df: pd.DataFrame, date_range: pd.DatetimeIndex, bar_width: int) -> pd.DataFrame:
     filled_dfs = []
@@ -66,7 +54,27 @@ def forward_back_fill(df: pd.DataFrame, date_range: pd.DatetimeIndex, bar_width:
                                   f"{{{misses}|{hits}|{back_fills}}} "
                                   f"Finished filling data for {tkr}".ljust(80)))
     return pd.concat(filled_dfs, ignore_index=True)
-   
+
+def fill_raw_data(source_path: str, output_path: str) -> pd.DataFrame:
+    """
+    Returns a DataFrame with forward/back filled data for all possible timestamps
+    Creates a .parquet of the DataFrame on first run
+    """
+    try:
+        return pd.read_parquet(output_path)
+    except FileNotFoundError as _:
+        pass
+    
+    print("Reading source path parquet...")
+    df = pd.read_parquet(source_path)
+
+    df = df.set_index(["T", "t"])
+    df = forward_back_fill(df, DATE_RANGE, BAR_WIDTH)
+
+    print("Saving Data...")
+    df.to_parquet(output_path, index=False)
+    return df
+
 if __name__ == "__main__":
-    filled_raw_data = fill_raw_data(path_data_scrapper)
+    filled_raw_data = fill_raw_data(path_data_scrapper, path_data_filler)
     print(filled_raw_data)
