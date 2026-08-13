@@ -1,6 +1,6 @@
 import pandas as pd
 
-from setup import HYPERPARAMETERS, AVG_VOLUME_PERIOD, RV_THRESH, MN, MX
+from setup import HYPERPARAMETERS, AVG_VOLUME_PERIOD, RV_THRESH, MN, MX, BAR_PER_DAY
 from setup import path_data_filler, path_data_preprocessor
 
 class ProcessingError(Exception):
@@ -66,7 +66,7 @@ def engineer_data(df: pd.DataFrame) -> pd.DataFrame:
     df = select_hyperparameters(df)
     return df
 
-def filter_data(df: pd.DataFrame) -> pd.DataFrame: 
+def filter_data(df: pd.DataFrame) -> pd.DataFrame:
     """
     Filters for RV and Price
     Additionally removes days with any NaN rv
@@ -78,12 +78,9 @@ def filter_data(df: pd.DataFrame) -> pd.DataFrame:
                (df.groupby(["T", "date"])["h"].transform("min")>MN))
     df = df[pc_mask]
 
-    nan_mask = (df.groupby(["T", "date"])["rv"].transform("count") < 26)
+    nan_mask = (df.groupby(["T", "date"])["rv"].transform("count") < BAR_PER_DAY)
     df = df[~nan_mask]
 
-    return df
-
-def normalize_data(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 def preprocess_data(source_path: str, output_path: str):
@@ -102,8 +99,11 @@ def preprocess_data(source_path: str, output_path: str):
     df = clear_data(df)
     df = engineer_data(df)
     df = filter_data(df)
+    df = df.sort_values(["date", "T", "bar"])       #! IMPORTANT FOR LATER TEST_VAL_SPLIT
     df = df.set_index(["T", "date"])
-    df = normalize_data(df)
+
+    float_cols = df.select_dtypes(include=["float64"]).columns
+    df[float_cols] = df[float_cols].astype("float32")
 
     print("Saving Data...")
     df.to_parquet(output_path, index=True)
