@@ -43,21 +43,25 @@ SEQ_LEN = 25
 OUTPUT_DIM = 256
 
 Stock_GPT_cfg = {
-    "SAVE_PATH": "model_parameters/stock_gpt_v1",
-    "INPUT_FEATURES": INPUT_FEATURES,
-    "TARGET_FEATURES": TARGET_FEATURES,
-    "BAR_PER_DAY": BAR_PER_DAY,
-    "SEQ_LEN": SEQ_LEN,
-    "OUTPUT_DIM": OUTPUT_DIM,
-    "N_HEADS": 4,
-    "N_TRANSFORMERS": 4,
-    "QKV_BIAS": False
+    "name": "stock_gpt_v1",
+    "checkpoint_path": "model_parameters/checkpoint_stock_gpt_6M",
+    "best_path": "model_parameters/best_stock_gpt_6M",
+    "input_features": INPUT_FEATURES,
+    "target_features": TARGET_FEATURES,
+    "bar_per_day": BAR_PER_DAY,
+    "seq_len": SEQ_LEN,
+    "output_dim": OUTPUT_DIM,
+    "n_heads": 4,
+    "n_transformers": 8,
+    "qkv_bias": False
 }
 
-Naive_GPT_cfg = {
-    "SAVE_PATH": "model_parameters/naive_gpt",
-    "INPUT_FEATURES": INPUT_FEATURES,
-    "TARGET_FEATURES": TARGET_FEATURES,
-    "SEQ_LEN": SEQ_LEN,
-    "OUTPUT_DIM": OUTPUT_DIM,
+Linear_Model_cfg = {
+    "name": "linear_model_cfg",
+    "checkpoint_path": "model_parameters/checkpoint_linear_model",
+    "best_path": "model_parameters/best_linear_model",
+    "input_features": INPUT_FEATURES,
+    "target_features": TARGET_FEATURES,
+    "seq_len": SEQ_LEN,
+    "output_dim": OUTPUT_DIM,
 }

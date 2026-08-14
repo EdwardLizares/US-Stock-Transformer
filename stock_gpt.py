@@ -7,8 +7,8 @@ from torch.utils.data import Dataset
 from setup import Stock_GPT_cfg as C
 
 class StockDataset(Dataset):
-    def __init__(self, df: pd.DataFrame, seq_len =  C["SEQ_LEN"], bar_count = C["BAR_PER_DAY"],
-                 input_features = C["INPUT_FEATURES"], target_features = C["TARGET_FEATURES"]):
+    def __init__(self, df: pd.DataFrame, seq_len =  C["seq_len"], bar_count = C["bar_per_day"],
+                 input_features = C["input_features"], target_features = C["target_features"]):
         """
         Assumes entire provided df DataFrame is the dataset and is normalized
         """
@@ -32,8 +32,8 @@ class MultiheadAttention(torch.nn.Module):
     """
     Creates a wide casual attention matrix and splits it
     """
-    def __init__(self, in_dim, out_dim, num_heads = C["N_HEADS"],
-                 qkv_bias = C["QKV_BIAS"], mx_sql = C["SEQ_LEN"]):
+    def __init__(self, in_dim, out_dim, num_heads = C["n_heads"],
+                 qkv_bias = C["qkv_bias"], mx_sql = C["seq_len"]):
         super().__init__()
         assert (out_dim % num_heads == 0)
         self.out_dim = out_dim
@@ -88,10 +88,10 @@ class FeedForward(torch.nn.Module):
 class StockTransformer(torch.nn.Module):
     def __init__(self, cfg):
         super().__init__()
-        self.ln1 = LayerNorm(cfg["OUTPUT_DIM"])
-        self.mha = MultiheadAttention(cfg["OUTPUT_DIM"], cfg["OUTPUT_DIM"], cfg["N_HEADS"])
-        self.ln2 = LayerNorm(cfg["OUTPUT_DIM"])
-        self.ff = FeedForward(cfg["OUTPUT_DIM"])
+        self.ln1 = LayerNorm(cfg["output_dim"])
+        self.mha = MultiheadAttention(cfg["output_dim"], cfg["output_dim"], cfg["n_heads"])
+        self.ln2 = LayerNorm(cfg["output_dim"])
+        self.ff = FeedForward(cfg["output_dim"])
 
     def forward(self, x):
         x = x + self.mha(self.ln1(x))
@@ -102,14 +102,15 @@ class StockGPT(torch.nn.Module):
     def __init__(self, cfg, train_norms, print_norms = False):
         super().__init__()
         self.cfg = cfg
-        self.save_path = cfg["SAVE_PATH"]
-        self.input_proj = torch.nn.Linear(len(cfg["INPUT_FEATURES"]), cfg["OUTPUT_DIM"])
-        self.pos_emb = torch.nn.Embedding(cfg["SEQ_LEN"], cfg["OUTPUT_DIM"])
+        self.checkpoint_path = cfg["checkpoint_path"]
+        self.best_path = cfg["best_path"]
+        self.input_proj = torch.nn.Linear(len(cfg["input_features"]), cfg["output_dim"])
+        self.pos_emb = torch.nn.Embedding(cfg["seq_len"], cfg["output_dim"])
         self.transformer_blocks = torch.nn.Sequential(
-            *[StockTransformer(cfg) for _ in range(cfg["N_TRANSFORMERS"])]
+            *[StockTransformer(cfg) for _ in range(cfg["n_transformers"])]
         )
-        self.final_norm = LayerNorm(cfg["OUTPUT_DIM"])
-        self.out_head = torch.nn.Linear(cfg["OUTPUT_DIM"], len(cfg["TARGET_FEATURES"]), False)
+        self.final_norm = LayerNorm(cfg["output_dim"])
+        self.out_head = torch.nn.Linear(cfg["output_dim"], len(cfg["target_features"]), False)
         self.register_buffer("input_mean", train_norms[0])
         self.register_buffer("input_std", train_norms[1])
         self.register_buffer("target_mean", train_norms[2])
@@ -128,7 +129,7 @@ class StockGPT(torch.nn.Module):
         x = self.final_norm(x)
         return self.out_head(x)
 
-class NaiveGPT(torch.nn.Module):
+class StockLinearModel(torch.nn.Module):
     """
     Single Linear Layer
     """
@@ -137,18 +138,20 @@ class NaiveGPT(torch.nn.Module):
         self.register_buffer("input_mean", train_norms[0])
         self.register_buffer("input_std", train_norms[1])
         self.register_buffer("target_mean", train_norms[2])
-        self.register_buffer("target_std", train_norms[3])    
-        self.linear_layer = torch.nn.Linear(len(cfg["INPUT_FEATURES"]), cfg["OUTPUT_DIM"])
-        self.out_head = torch.nn.Linear(cfg["OUTPUT_DIM"], len(cfg["TARGET_FEATURES"]), False)
+        self.register_buffer("target_std", train_norms[3])
+        self.checkpoint_path = cfg["checkpoint_path"]
+        self.best_path = cfg["best_path"]        
+        self.linear_layer = torch.nn.Linear(len(cfg["input_features"]), cfg["output_dim"])
+        self.out_head = torch.nn.Linear(cfg["output_dim"], len(cfg["target_features"]), False)
 
     def forward(self, x):
-        bs, sql, _ = x.shape
+        x = ( x - self.input_mean ) / self.input_std
         x = self.linear_layer(x)
         x = self.out_head(x)
         return x
 
 if __name__ == "__main__":
-    naive = NaiveGPT(C, [torch.ones(25), torch.zeros(25), torch.ones(25), torch.zeros(25)])
+    naive = LinearModel(C, [torch.ones(25), torch.zeros(25), torch.ones(25), torch.zeros(25)])
     test_data = torch.rand(1, 25, 13)
     print(test_data)
     print(test_data.shape)
