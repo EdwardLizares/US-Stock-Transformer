@@ -4,11 +4,12 @@ import torch.nn.functional as func
 
 from torch.utils.data import Dataset
 
-from setup import Stock_GPT_cfg as C
+from setup import StockGPT_cfg as C
 
 class StockDataset(Dataset):
     def __init__(self, df: pd.DataFrame, seq_len =  C["seq_len"], bar_count = C["bar_per_day"],
-                 input_features = C["input_features"], target_features = C["target_features"]):
+                 input_features = C["input_features"], target_features = C["target_features"],
+                 step = C["step"]):
         """
         Assumes entire provided df DataFrame is the dataset and is normalized
         """
@@ -16,6 +17,7 @@ class StockDataset(Dataset):
         self.target = df[target_features].to_numpy(dtype="float32")
         self.seq_len = seq_len
         self.bar_count = bar_count  # bars in a day (15min --> 26)
+        self.step = step
 
     def __len__(self):
         return len(self.input)//self.bar_count
@@ -26,7 +28,7 @@ class StockDataset(Dataset):
         """
         idx*=self.bar_count
         return (torch.from_numpy(self.input[idx:idx+self.seq_len]),
-                torch.from_numpy(self.target[idx+1:idx+self.seq_len+1]))
+                torch.from_numpy(self.target[idx+self.step:idx+self.seq_len+self.step]))
 
 class MultiheadAttention(torch.nn.Module):
     """
@@ -129,7 +131,7 @@ class StockGPT(torch.nn.Module):
         x = self.final_norm(x)
         return self.out_head(x)
 
-class StockLinearModel(torch.nn.Module):
+class LinearModel(torch.nn.Module):
     """
     Single Linear Layer
     """
@@ -149,6 +151,23 @@ class StockLinearModel(torch.nn.Module):
         x = self.linear_layer(x)
         x = self.out_head(x)
         return x
+
+class NaiveModel(torch.nn.Module):
+    def __init__(self, cfg, train_norms):
+        super().__init__()
+        self.register_buffer("input_mean", train_norms[0])
+        self.register_buffer("input_std", train_norms[1])
+        self.register_buffer("target_mean", train_norms[2])
+        self.register_buffer("target_std", train_norms[3])
+        self.target_indices = [
+            cfg["input_features"].index(feature)
+            for feature in cfg["target_features"]
+        ]
+
+    def forward(self, x):
+        x = (x - self.input_mean) / self.input_std
+        return x[:, :, self.target_indices] #* Drops columns from input features I don't need to predict
+
 
 if __name__ == "__main__":
     naive = LinearModel(C, [torch.ones(25), torch.zeros(25), torch.ones(25), torch.zeros(25)])

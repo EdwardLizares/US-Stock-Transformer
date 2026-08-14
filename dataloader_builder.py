@@ -6,7 +6,7 @@ from torch.utils.data import DataLoader
 
 from setup import SPLIT, BAR_PER_DAY, INPUT_FEATURES, TARGET_FEATURES, BATCH_SIZE
 from setup import path_data_preprocessor
-from setup import Stock_GPT_cfg as C
+from setup import StockGPT_cfg as C
 
 def test_val_train_splits(df: pd.DataFrame, bpd: int, split: list[int]) -> list[pd.DataFrame]:
     """

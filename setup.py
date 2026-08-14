@@ -39,10 +39,10 @@ TARGET_FEATURES = ["vw", "ema9", "ema20", "o", "c", "h", "l",
                    "n", "rv", "gp"]
 
 # Stock GPT -----------------------------------------------------------------------------------------
-SEQ_LEN = 25
+SEQ_LEN = 12
 OUTPUT_DIM = 256
 
-Stock_GPT_cfg = {
+StockGPT_cfg = {
     "name": "stock_gpt_v1",
     "checkpoint_path": "model_parameters/checkpoint_stock_gpt_6M",
     "best_path": "model_parameters/best_stock_gpt_6M",
@@ -52,16 +52,23 @@ Stock_GPT_cfg = {
     "seq_len": SEQ_LEN,
     "output_dim": OUTPUT_DIM,
     "n_heads": 4,
-    "n_transformers": 8,
-    "qkv_bias": False
+    "n_transformers": 4,
+    "qkv_bias": False,
+    "step": 4
 }
 
-Linear_Model_cfg = {
+LinearModel_cfg = {
     "name": "linear_model_cfg",
-    "checkpoint_path": "model_parameters/checkpoint_linear_model",
-    "best_path": "model_parameters/best_linear_model",
+    "checkpoint_path": "model_parameters/checkpoint_linear_model_6K",
+    "best_path": "model_parameters/best_linear_model_6K",
     "input_features": INPUT_FEATURES,
     "target_features": TARGET_FEATURES,
     "seq_len": SEQ_LEN,
     "output_dim": OUTPUT_DIM,
+    "step": 2
+}
+
+NaiveModel_cfg = {
+    "input_features": INPUT_FEATURES,
+    "target_features": TARGET_FEATURES,
 }
