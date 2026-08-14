@@ -18,9 +18,9 @@ path_data_scrapper = f"raw_data/{FILE_NAME}.parquet"                    #* Outpu
 
 # Data Filler ------------------------------------------------------------------------------------------
 BAR_WIDTH = 15                                                          # OHLC Bar Widths
-HYPERPARAMETERS = ["T", "date", "bar", "vw", "ema9",                    # Columns for processed data
-                   "ema20", "o", "c", "h", "l", "n", 
-                   "rv", "gp", "fb"]                                    #! Recent Change: Removed y
+COLUMNS = ["T", "date", "bar", "vw", "ema9",                    # Columns for processed data
+           "ema20", "o", "c", "h", "l", "n", 
+           "rv", "gp", "fb"]                                    #! Recent Change: Removed y
 
 path_data_filler = f"filled_raw_data/{FILE_NAME}.parquet"               #*Output path of data_filler.py
 
@@ -31,18 +31,33 @@ path_data_preprocessor = f"preprocessed_data/{FILE_NAME}.parquet"       #*Output
 
 # Dataloader Builder -------------------------------------------------------------------------------------- 
 
-SPLIT = [75, 15, 10]
-HYPERPARAMETERS = ["bar", "vw", "ema9", "ema20", "o", "c",                     #*Subset of total column
-                   "h", "l", "n", "rv", "gp", "fb"],
-# Transformer CFG
+SPLIT = [0.75, 0.9, 1]
+BATCH_SIZE = 256
+INPUT_FEATURES = ["bar", "vw", "ema9", "ema20", "o", "c", "h", "l", 
+                  "n", "rv", "gp", "f", "bf"]
+TARGET_FEATURES = ["vw", "ema9", "ema20", "o", "c", "h", "l", 
+                   "n", "rv", "gp"]
+
+# Stock GPT -----------------------------------------------------------------------------------------
+SEQ_LEN = 25
+OUTPUT_DIM = 256
 
 Stock_GPT_cfg = {
-    "HYPERPARAMETERS": 12,
+    "SAVE_PATH": "model_parameters/stock_gpt_v1",
+    "INPUT_FEATURES": INPUT_FEATURES,
+    "TARGET_FEATURES": TARGET_FEATURES,
     "BAR_PER_DAY": BAR_PER_DAY,
-    "BATCH_SIZE": 4,
-    "SEQ_LEN": 25,
-    "OUTPUT_DIM": 256,
-    "N_HEADS": 8,
-    "N_TRANSFORMERS": 12,
+    "SEQ_LEN": SEQ_LEN,
+    "OUTPUT_DIM": OUTPUT_DIM,
+    "N_HEADS": 4,
+    "N_TRANSFORMERS": 4,
     "QKV_BIAS": False
+}
+
+Naive_GPT_cfg = {
+    "SAVE_PATH": "model_parameters/naive_gpt",
+    "INPUT_FEATURES": INPUT_FEATURES,
+    "TARGET_FEATURES": TARGET_FEATURES,
+    "SEQ_LEN": SEQ_LEN,
+    "OUTPUT_DIM": OUTPUT_DIM,
 }

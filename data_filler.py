@@ -26,7 +26,8 @@ def forward_back_fill(df: pd.DataFrame, date_range: pd.DatetimeIndex, bar_width:
         expected_timestamps = get_unix_timestamps(date_range, bar_width)   
         ety = tkr_df.reindex(expected_timestamps)
         ety["date"] = (pd.to_datetime(ety.index, unit="ms", utc=True).tz_convert("America/New_York").date)
-        ety["fb"] = 0
+        ety["f"] = 0                #! FAKE/SYTHETIC BAR    
+        ety["bf"] = 0               #! BACKFILLED SPECIFICALLY (HOT ENCODING)
 
         f_mask = ety["c"].isna()
         misses += f_mask.sum()
@@ -35,7 +36,7 @@ def forward_back_fill(df: pd.DataFrame, date_range: pd.DatetimeIndex, bar_width:
         for col in ["o", "h", "l", "c", "vw"]:
             ety.loc[f_mask, col] = p_c[f_mask]
         ety.loc[f_mask, ["v", "n"]] = 0
-        ety.loc[f_mask, ["fb"]] = 1
+        ety.loc[f_mask, ["f"]] = 1
 
         b_mask = p_c.isna()
         back_fills += b_mask.sum()
@@ -44,7 +45,7 @@ def forward_back_fill(df: pd.DataFrame, date_range: pd.DatetimeIndex, bar_width:
             for col in ["o", "h", "l", "c", "vw"]:
                         ety.loc[b_mask, col] = n_o[b_mask]
             ety.loc[b_mask, ["v", "n"]] = 0
-            ety.loc[b_mask, ["fb"]] = 2
+            ety.loc[b_mask, ["bf"]] = 1
 
         ety["T"] = tkr
         ety["t"] = ety.index

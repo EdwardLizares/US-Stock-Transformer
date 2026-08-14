@@ -50,7 +50,7 @@ def calculate_additional_hyperparameters(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 def select_hyperparameters(df: pd.DataFrame) -> pd.DataFrame:
-    return df[HYPERPARAMETERS]
+    return df[HYPERPARAMETERS+["T", "date"]]
 
 def clear_data(df: pd.DataFrame) -> pd.DataFrame:
     print("Culling empty days...")
@@ -110,7 +110,7 @@ def preprocess_data(source_path: str, output_path: str):
     return df
 
 def debug(df: pd.DataFrame):
-    bc = df["bar"].value_counts().sort_index()
+    bc = df.groupby(level=["T", "date"]).size()
     print(f"Bar Counts: " + 
           ("Valid " if bc.iloc[0]*len(bc)==len(df) else "Invalid") + 
           f"({len(bc)}/{bc.iloc[0]}/{len(df)})")

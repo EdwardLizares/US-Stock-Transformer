@@ -2,3 +2,14 @@ Optimized for 15min intervals for 2025
 Trying 1min? But data delayed by 15mins without subscription
 
 DataSet operating on 2 25-long OHLC bar windows offset
+
+Preprocessing Data:
+
+    -- Normalizing
+            Categoricals: fb
+            Everything else statistics, so how to normalize before creating DataLoader?
+            OK figure out
+
+Loss:
+
+    Prediction -> Huber(Real - Prediction)
