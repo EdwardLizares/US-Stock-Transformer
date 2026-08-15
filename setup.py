@@ -2,7 +2,7 @@ import pandas_market_calendars as mcal
 
 API_KEY = "sdpbiDy3nfhuvQX2SBBtL6Gt2dl88ZrU"
 DATE_RANGE = mcal.get_calendar("NYSE").schedule("2025-01-01","2025-12-31").index
-FILE_NAME = "data_15min_2025"
+FILE_NAME = "data_5min_2025"
 
 AVG_VOLUME_PERIOD = 90                                                  # 
 RV_THRESH = 5
@@ -10,22 +10,22 @@ MN = 1                                                                  # Pre-cu
 MX = 30     
 
 # Data Scrapper ----------------------------------------------------------------------------------------
-TIMEFRAME = "15/minute"                                                 # OHLC Bar Widths in url                                                            
+TIMEFRAME = "5/minute"                                                 # OHLC Bar Widths in url                                                            
 
 path_raw_all_tickers = "raw_data/all_tickers"
 path_raw_tickers_trimmed = "raw_data/all_tickers_trimmed_1_30"
 path_data_scrapper = f"raw_data/{FILE_NAME}.parquet"                    #* Output path of data_scrapper.py
 
 # Data Filler ------------------------------------------------------------------------------------------
-BAR_WIDTH = 15                                                          # OHLC Bar Widths
+BAR_WIDTH = 5                                                          # OHLC Bar Widths in minutes
 COLUMNS = ["T", "date", "bar", "vw", "ema9",                    # Columns for processed data
            "ema20", "o", "c", "h", "l", "n", 
            "rv", "gp", "fb"]                                    #! Recent Change: Removed y
 
-path_data_filler = f"filled_raw_data/{FILE_NAME}.parquet"               #*Output path of data_filler.py
+path_data_filler = f"filled_raw_data/{FILE_NAME}"               #*Output path of data_filler.py
 
 # Data Preprocessor ------------------------------------------------------------------------------------
-BAR_PER_DAY = 26
+BAR_PER_DAY = 26*3
 
 path_data_preprocessor = f"preprocessed_data/{FILE_NAME}.parquet"       #*Output path of data_preprocessor
 
@@ -39,7 +39,8 @@ TARGET_FEATURES = ["vw", "ema9", "ema20", "o", "c", "h", "l",
                    "n", "rv", "gp"]
 
 # Stock GPT -----------------------------------------------------------------------------------------
-SEQ_LEN = 12
+SEQ_LEN = 36
+STEP = 36
 OUTPUT_DIM = 256
 
 StockGPT_cfg = {
@@ -54,7 +55,7 @@ StockGPT_cfg = {
     "n_heads": 4,
     "n_transformers": 4,
     "qkv_bias": False,
-    "step": 4
+    "step": STEP
 }
 
 LinearModel_cfg = {
@@ -65,7 +66,7 @@ LinearModel_cfg = {
     "target_features": TARGET_FEATURES,
     "seq_len": SEQ_LEN,
     "output_dim": OUTPUT_DIM,
-    "step": 2
+    "step": STEP
 }
 
 NaiveModel_cfg = {
