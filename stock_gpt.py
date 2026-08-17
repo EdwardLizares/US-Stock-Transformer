@@ -1,34 +1,7 @@
-import pandas as pd
 import torch
 import torch.nn.functional as func
 
-from torch.utils.data import Dataset
-
-from setup import StockGPT_cfg as C
-
-class StockDataset(Dataset):
-    def __init__(self, df: pd.DataFrame, seq_len =  C["seq_len"], bar_count = C["bar_per_day"],
-                 input_features = C["input_features"], target_features = C["target_features"],
-                 step = C["step"]):
-        """
-        Assumes entire provided df DataFrame is the dataset and is normalized
-        """
-        self.input = df[input_features].to_numpy(dtype="float32")
-        self.target = df[target_features].to_numpy(dtype="float32")
-        self.seq_len = seq_len
-        self.bar_count = bar_count  # bars in a day (15min --> 26)
-        self.step = step
-
-    def __len__(self):
-        return len(self.input)//self.bar_count
-
-    def __getitem__(self, idx: int):
-        """
-        Returns both the input and target OLHC sequence
-        """
-        idx*=self.bar_count
-        return (torch.from_numpy(self.input[idx:idx+self.seq_len]),
-                torch.from_numpy(self.target[idx+self.step:idx+self.seq_len+self.step]))
+from setup import StockGPT_cfg as cfg
 
 class MultiheadAttention(torch.nn.Module):
     """
@@ -167,7 +140,6 @@ class NaiveModel(torch.nn.Module):
     def forward(self, x):
         x = (x - self.input_mean) / self.input_std
         return x[:, :, self.target_indices] #* Drops columns from input features I don't need to predict
-
 
 if __name__ == "__main__":
     naive = LinearModel(C, [torch.ones(25), torch.zeros(25), torch.ones(25), torch.zeros(25)])

@@ -18,163 +18,184 @@ def get_unix_timestamps(date_range: pd.DatetimeIndex, bar_width: int):
                     ).strftime("%H:%M")
         ], format="%Y-%m-%d %H:%M").tz_localize("America/New_York").as_unit("ms").astype("int64")
 
-def data_to_df(tickers, unix_timestamps):
-    tickers_df = pd.DataFrame({
-        "T": ["AAPL", "MSFT", "NVDA"]
-    })
-    timestamps_df = pd.DataFrame({
-        "t": get_unix_timestamps(DATE_RANGE, BAR_WIDTH)
-    })
-    return tickers_df, timestamps_df
-
-def get_expected_t():
-    """
-    Returns the expected ticker, date, t_ms combos as an sql string
-    """
-    return f"""
-        SELECT
-            ticker.T,
-            times.bar_time
-        FROM tickers_df ticker
-        CROSS JOIN timestamps_df
-    """
-
-def forward_back_fill(source_path: str):
-    duckdb.sql("""
-        SELECT *
-        FROM 'source_path.parquet'
-        
-    """)
-    return
-
-def test_db(source_path: str):
-    test = duckdb.sql(f"""
-        SELECT *
-        FROM '{source_path}'
-        GROUP BY T_1, t
-        LIMIT 10
-    """)
-    goal = duckdb.sql(f"""
-        SELECT *
-        FROM  '{"filled_raw_data/data_15min_2025.parquet"}'
-        LIMIT 10
-    """)
-    return test, goal
-
-def duckdb_fill():
+def duckdb_fill(input_path, output_path, tickers):
     con = duckdb.connect()
-    con.execute("""SET enable_progress_bar = true""")
-    step1 = con.sql(f"""
-        SELECT
-            *,
-            CAST(
-                timezone(
-                    'America/New_York',
-                    to_timestamp(t / 1000.0)
-                )
-                AS DATE
-            ) AS date,
-            CASE
-                WHEN c IS NULL THEN 1
-                ELSE 0
-            END AS f,
-            0 AS fb
-        FROM (
-            SELECT tickers_df.T_1, timestamps_df.t
-            FROM tickers_df
-            CROSS JOIN timestamps_df
-        ) AS expected
-        LEFT JOIN read_parquet('{path_data_scrapper}') AS data
-        USING (T_1, t)
-        ORDER BY T_1, t
-        LIMIT 10000
+    con.execute("SET memory_limit = '16GB'")
+    con.execute("SET temp_directory = 'duckdb_temp'")
+    #* Creates a table of all the data
+    con.execute(f"""
+        CREATE TEMP TABLE raw_data AS
+        SELECT * EXCLUDE (otc)
+        FROM read_parquet('{input_path}')
     """)
-    ff = con.sql(f"""
-        SELECT 
-        *,
-        LAST_VALUE(c IGNORE NULLS) OVER (
-            PARTITION BY T_1, date
-            ORDER BY t
-            ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-        ) as c_ff
-        FROM step1
-        ORDER BY T_1, t
-        LIMIT 10000
-    """)
-    ff = con.sql(f"""
-        SELECT
-        * REPLACE (
-            COALESCE(o, c_ff) as o,
-            COALESCE(c, c_ff) as c,
-            COALESCE(h, c_ff) as h,
-            COALESCE(l, c_ff) as l,
-            COALESCE(vw, c_ff) as vw,
-            CASE
-                WHEN f = 1 AND c_ff IS NOT NULL THEN 0
-                ELSE v
-            END AS v,
-            CASE
-                WHEN f = 1 AND c_ff IS NOT NULL THEN 0
-                ELSE n
-            END AS n
-        )
-        FROM ff
-        ORDER BY T_1, t
-        LIMIT 10000
-    """)
-    bf = con.sql("""
-        SELECT
-            *,
-            FIRST_VALUE(c IGNORE NULLS) OVER (
-                PARTITION BY T_1, date
-                ORDER BY t
-                ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING
-            ) AS c_bf
-        FROM ff
-    """)
-    bf = con.sql("""
-        SELECT
-            * REPLACE (
+
+    batches_made, batch_exists, batch_limit, batch_count = 0, False, 1000, 0
+    timestamps_df = pd.DataFrame({"t": get_unix_timestamps(DATE_RANGE, BAR_WIDTH)})
+    pbar = tqdm(tickers, total=len(tickers), desc=f"Sending jobs to threads...".ljust(80),
+                bar_format="|{bar}| {percentage:3.1f}% ({elapsed}) {desc}")
+    os.makedirs(output_path, exist_ok=True)
+    for ticker in pbar:
+        pbar.set_description(f"Filling data for {ticker}...")
+        #* Gets the cur tkr table
+        tkr_db = con.sql(f"""
+            SELECT *
+            FROM raw_data
+            WHERE T_1 = '{ticker}'
+        """)
+
+        #* Fills all possible days
+        all_days = con.sql(f"""
+            SELECT
+                *,
+                CAST(
+                    timezone(
+                        'America/New_York',
+                        to_timestamp(t / 1000.0)
+                    )
+                    AS DATE
+                ) AS date,
                 CASE
-                    WHEN f = 1
-                        AND c_ff IS NULL
-                        AND c_bf IS NOT NULL
-                    THEN 1
+                    WHEN c IS NULL THEN 1
                     ELSE 0
-                END AS fb,
+                END AS f,
+                0 AS fb
+            FROM (
+                SELECT
+                    '{ticker}' AS T_1,
+                    timestamps_df.t
+                FROM timestamps_df
+            ) AS expected
 
-                COALESCE(o,  c_bf) AS o,
-                COALESCE(c,  c_bf) AS c,
-                COALESCE(h,  c_bf) AS h,
-                COALESCE(l,  c_bf) AS l,
-                COALESCE(vw, c_bf) AS vw,
+            LEFT JOIN tkr_db
+            USING (T_1, t)
+        """)
 
+        #* Removes invalid days (before real start, after real close)
+        valid_days = con.sql(f"""
+            SELECT *
+            FROM all_days
+            WHERE 
+                t >= (
+                    SELECT MIN(t)
+                    FROM tkr_db
+                )
+                AND
+                t <= (
+                    SELECT MAX(t)
+                    FROM tkr_db
+                )
+        """)
+
+        #* Assigns c_ff to all timestamps discluding backfill days
+        forward_fill_step1 = con.sql(f"""
+            SELECT 
+            *,
+            LAST_VALUE(c IGNORE NULLS) OVER (
+                PARTITION BY date
+                ORDER BY t
+                ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+            ) as c_ff
+            FROM valid_days
+        """)
+
+        #* Fills ohlc & vw to c_ff for ff days, sets v & n to 0 FOR ALL SYNTHETIC DAYS
+        forward_fill_step2 = con.sql(f"""
+            SELECT
+            * REPLACE (
+                COALESCE(o, c_ff) as o,
+                COALESCE(h, c_ff) as h,
+                COALESCE(c, c_ff) as c,
+                COALESCE(l, c_ff) as l,
+                COALESCE(vw, c_ff) as vw,
                 CASE
-                    WHEN f = 1
-                        AND c_ff IS NULL
-                        AND c_bf IS NOT NULL
-                    THEN 0
+                    WHEN f = 1 THEN 0
                     ELSE v
                 END AS v,
-
                 CASE
-                    WHEN f = 1
-                        AND c_ff IS NULL
-                        AND c_bf IS NOT NULL
-                    THEN 0
+                    WHEN f = 1 THEN 0
                     ELSE n
                 END AS n
             )
-        FROM bf
-        ORDER BY T_1, t
-        LIMIT 10000
+            FROM forward_fill_step1
+        """)
+
+        #* Assigns c_bf to all backfill days
+        back_fill_step1 = con.sql("""
+            SELECT
+                *,
+                FIRST_VALUE(c IGNORE NULLS) OVER (
+                    PARTITION BY date
+                    ORDER BY t
+                    ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING
+                ) AS c_bf
+            FROM forward_fill_step2
+        """)
+
+        #* Fills ohlc & vw to c_bf for bf days
+        back_fill_step2 = con.sql("""
+            SELECT
+                * REPLACE (
+                    CASE
+                        WHEN f = 1
+                            AND c_ff IS NULL
+                            AND c_bf IS NOT NULL
+                        THEN 1
+                        ELSE 0
+                    END AS fb,
+
+                    COALESCE(o,  c_bf) AS o,
+                    COALESCE(h,  c_bf) AS h,
+                    COALESCE(l,  c_bf) AS l,
+                    COALESCE(c,  c_bf) AS c,
+                    COALESCE(vw, c_bf) AS vw,
+                )
+            FROM back_fill_step1
+            ORDER BY t
+        """)
+        batch_count+=1
+        if not batch_exists:
+            con.execute("""
+                CREATE TEMP TABLE batch AS
+                SELECT * FROM back_fill_step2
+            """)
+            batch_exists = True
+        else:
+            con.execute("""
+                INSERT INTO batch
+                SELECT * FROM back_fill_step2
+            """)
+        if batch_count >= batch_limit:
+            con.execute(f"""
+                COPY (
+                    SELECT * EXCLUDE (c_ff, c_bf)
+                    FROM batch
+                )
+                TO '{output_path}/batch{batches_made}.parquet'
+                (FORMAT PARQUET)
+            """)
+            con.execute("""DROP TABLE batch""")
+            batch_exists = False
+            batches_made += 1
+            batch_count = 0
+    if batch_exists:
+        con.execute(f"""
+            COPY (
+                SELECT * EXCLUDE (c_ff, c_bf)
+                FROM batch
+            )
+            TO '{output_path}/batch{batches_made}.parquet'
+            (FORMAT PARQUET)
+        """)
+
+def debug(source_path):
+    db = duckdb.sql(f"""
+        SELECT *
+        FROM read_parquet('{source_path}/batch0.parquet')
     """)
-    return bf
-    
+    return db
+
 if __name__ == "__main__":
     with open("raw_data/all_tickers_trimmed_1_30", "r") as f:
         tickers = json.load(f)
-    tickers_df = pd.DataFrame({"T_1": tickers})
-    timestamps_df = pd.DataFrame({"t": get_unix_timestamps(DATE_RANGE, BAR_WIDTH)})
-    duckdb_fill() # Accesses tickers_df and timestamps_df internally
-    print(bf)
+    #duckdb_fill(path_data_scrapper, path_data_filler, tickers)
+    print(debug(path_data_filler))
