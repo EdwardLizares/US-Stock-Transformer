@@ -1,11 +1,11 @@
 import os
-import duckdb
+import pyarrow as pa
 import pandas as pd
 
 from tqdm import tqdm
 from pathlib import Path 
 
-from setup import AVG_VOLUME_PERIOD, RV_THRESH, MN, MX, BAR_PER_DAY
+from setup import AVG_VOLUME_PERIOD, RV_THRESH, MN, MX, BAR_PER_DAY, INPUT_FEATURES
 from setup import path_data_filler, path_data_preprocessor
 
 class ProcessingError(Exception):
@@ -76,15 +76,21 @@ def filter_data(df: pd.DataFrame, pbar) -> pd.DataFrame:
 
 def preprocess_data(source_folder: str, output_folder: str):
     """
-    Processes .parquet files in a given source_folder
+    Takes a folder with train-val-test subfolders 
     Creates a folder of .parquet files
     """
+    assert ({p.name for p in Path(source_folder).glob("*/")} == {"test", "train", "val"}, 
+            "Incorrect source folder format")
     os.makedirs(output_folder, exist_ok=True)
-    files = list(Path(source_folder).glob("*.parquet"))
+    folders = list(Path(source_folder).glob("*/"))
+    files = []
+    for folder in folders:
+        files += list(Path(folder).glob("*.parquet"))
+    
     pbar = tqdm(files, f"Setting up...".ljust(80),
                 bar_format="|{bar}| {percentage:3.1f}% ({elapsed}) {desc}")
     for filled_batch_path in pbar:
-        if Path(f"{output_folder}/{filled_batch_path.stem}.parquet").exists() and True:
+        if Path(f"{output_folder}/{filled_batch_path.stem}.arrow").exists():
             pbar.write(f"{str(filled_batch_path)} has already been preprocessed...")
             continue #* Doesn't recalculate
         pbar.set_description(f"Reading source path parquet at {str(filled_batch_path)}...".ljust(80))
@@ -92,25 +98,27 @@ def preprocess_data(source_folder: str, output_folder: str):
 
         df = engineer_data(df, pbar)
         df = filter_data(df, pbar)
-        df = df.sort_values(["date", "T_1", "bar"])       #! IMPORTANT FOR LATER TEST_VAL_SPLIT
-        df = df.set_index(["T_1", "date"])
+        df = df.sort_values(["date", "T_1", "bar"])
+        df = df[INPUT_FEATURES+["T_1", "date"]]
 
         float_cols = df.select_dtypes(include=["float64"]).columns
         df[float_cols] = df[float_cols].astype("float32")
 
-        output_path = f"{output_folder}/{filled_batch_path.stem}"
+        #* Convert to arrow
+        table = pa.Table.from_pandas(df,preserve_index=False)
+        output_path = (f"{output_folder}/"f"{filled_batch_path.stem}.arrow")
+
+        output_path = f"{output_folder}/{filled_batch_path.stem}.arrow"
         pbar.set_description(f"Saving data to {output_path}...".ljust(80))
-        df.to_parquet(f"{output_path}.parquet", index=True)
+        with pa.OSFile(output_path, "wb") as sink:
+            with pa.ipc.new_file(sink, table.schema) as writer:
+                writer.write_table(table)
     pbar.set_description("Data preprocessing complete")
 
 def debug(source_path, columns: str = '*'):
-    db = duckdb.sql(f"""
-        SELECT {columns}
-        FROM read_parquet('{source_path}/batch0.parquet')
-    """)
-    return db
+    pass
 
 if __name__ == "__main__":
-    #preprocess_data(path_data_filler, path_data_preprocessor)
-    print(debug(path_data_preprocessor, "f, fb"))
+    preprocess_data(path_data_filler, path_data_preprocessor)
+    print(debug(path_data_preprocessor))
     

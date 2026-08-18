@@ -33,10 +33,12 @@ path_data_preprocessor = f"preprocessed_data/{FILE_NAME}"       #*Output path of
 
 SPLIT = [0.75, 0.9, 1]
 BATCH_SIZE = 256
-INPUT_FEATURES = ["bar", "vw", "ema9", "ema20", "o", "c", "h", "l",
-                  "n", "rv", "gp", "f", "fb"]
-TARGET_FEATURES = ["vw", "ema9", "ema20", "o", "c", "h", "l",
-                   "n", "rv", "gp"]
+NUM_WORKERS = 2
+PERSISTENT_WORKERS = True
+INPUT_FEATURES = ["bar", "vw", "ema9", "ema20", "macd", "o", "c", "h", "l",
+                  "n", "rv", "f", "fb"]
+TARGET_FEATURES = ["vw", "ema9", "ema20", "macd", "o", "c", "h", "l",
+                   "n", "rv"]
 
 # Stock GPT -----------------------------------------------------------------------------------------
 SEQ_LEN = 36
@@ -45,10 +47,10 @@ OUTPUT_DIM = 256
 
 StockGPT_cfg = {
     "name": "stock_gpt_v1",
-    "checkpoint_path": "model_parameters/checkpoint_stock_gpt_6M",
-    "best_path": "model_parameters/best_stock_gpt_6M",
-    "input_features": ", ".join(x for x in INPUT_FEATURES),
-    "target_features": ", ".join(x for x in TARGET_FEATURES),
+    "checkpoint_path": "model_parameters/checkpoint_stock_gpt_5min",
+    "best_path": "model_parameters/best_stock_gpt_5min",
+    "input_features": INPUT_FEATURES,
+    "target_features": TARGET_FEATURES,
     "bar_per_day": BAR_PER_DAY,
     "seq_len": SEQ_LEN,
     "output_dim": OUTPUT_DIM,
@@ -59,9 +61,9 @@ StockGPT_cfg = {
 }
 
 LinearModel_cfg = {
-    "name": "linear_model_cfg",
-    "checkpoint_path": "model_parameters/checkpoint_linear_model_6K",
-    "best_path": "model_parameters/best_linear_model_6K",
+    "name": "linear_model",
+    "checkpoint_path": "model_parameters/checkpoint_linear_model_5min",
+    "best_path": "model_parameters/best_linear_model_5min",
     "input_features": INPUT_FEATURES,
     "target_features": TARGET_FEATURES,
     "seq_len": SEQ_LEN,

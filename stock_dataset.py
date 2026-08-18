@@ -1,51 +1,87 @@
 import torch
 import duckdb
 
-from torch.utils.data import IterableDataset
+from torch.utils.data import IterableDataset, get_worker_info
+from pathlib import Path
 
 from setup import StockGPT_cfg as cfg
 
 class StockDataset(IterableDataset):
-    def __init__(self, con, view_name: str, dq: duckdb.DuckDBPyRelation, seq_len: int =  cfg["seq_len"],
-                 input_features: str = cfg["input_features"], target_features: str = cfg["target_features"],
-                 step: int = cfg["step"]):
+    def __init__(self, source_folder, split_cond: str, seq_len: int = cfg["seq_len"],
+                 step: int = cfg["step"], bar_per_day = cfg["bar_per_day"],
+                 input_features: list = cfg["input_features"], target_features: list = cfg["target_features"]):
         """
         Converts a duckdb relation object into a dataset
         """
-        self.con = con
-        self.view_name = view_name
-        dq.create_view(view_name)
-
+        super().__init__()
         self.input_features = input_features
         self.target_features = target_features
 
+        self.source_folder = source_folder
+        self.split_cond = split_cond
+
         self.seq_len = seq_len
         self.step = step
+        self.bar_per_day = bar_per_day
+
+        con = duckdb.connect()
+        n_days = con.execute(f"""
+            SELECT COUNT(*)
+            FROM (
+                SELECT DISTINCT T_1, date
+                FROM read_parquet('{source_folder}/*.parquet')
+                WHERE {split_cond}
+            )
+        """).fetchone()[0]
+        con.close()
+        samples_per_day = (bar_per_day - seq_len - step + 1)
+        self.length = n_days * samples_per_day
+
+    def __len__(self):
+        return self.length
 
     def __iter__(self):
-        data = self.con.execute(f"""
-            SELECT *
-            FROM {self.view_name}
-            ORDER BY T_1, date, bar
-        """)
+        files = list(Path(self.source_folder).glob("*.parquet"))
+        worker = get_worker_info()
+        if worker is None:
+            worker_files = files
+        else:
+            worker_files = files[worker.id::worker.num_workers]
+        con = duckdb.connect()
+        for file_path in worker_files:
+            df = con.execute(f"""
+                SELECT *
+                FROM read_parquet('{file_path}')
+                WHERE {self.split_cond}
+            """).df()
+            if df.empty:
+                continue
 
-        while True:
-            chunk = data.fetch_df_chunk(100)
-            if chunk.empty:
-                break
+            inputs = torch.from_numpy(df[self.input_features].to_numpy(dtype="float32"))
+            targets = torch.from_numpy(df[self.target_features].to_numpy(dtype="float32"))
 
-            for (_, _), day in chunk.groupby(["T_1", "date"],sort=False):
-                inputs = day[self.input_features].to_numpy(dtype="float32")
-                targets = day[self.target_features].to_numpy(dtype="float32")
+            n_days = len(df) // self.bar_per_day
+            inputs = inputs.reshape(n_days, self.bar_per_day, len(self.input_features))
+            targets = targets.reshape(n_days,self.bar_per_day, len(self.target_features))
 
-                max_start = len(day) - self.seq_len - self.step + 1
-                for start in range(max_start):
-                    input_start = start
-                    input_end = start + self.seq_len
-                    target_start = start + self.step
-                    target_end = target_start + self.seq_len
+            x = inputs.unfold(dimension=1, size=self.seq_len, step=1)   #* [days, windows, features, seq_len]
+            x = x.permute(0, 1, 3, 2)                                   #* [days, windows, seq_len, features]
 
-                    x = inputs[input_start:input_end]
-                    y = targets[target_start:target_end]
+            y = targets[:, self.step:]
 
-                    yield (torch.from_numpy(x),torch.from_numpy(y))
+            y = y.unfold(dimension=1,size=self.seq_len,step=1)
+            y = y.permute(0, 1, 3, 2)
+
+            n_windows = min(x.shape[1],y.shape[1])
+            x = x[:, :n_windows]
+            y = y[:, :n_windows]
+
+            x = x.reshape(-1,self.seq_len,len(self.input_features))
+            y = y.reshape(-1,self.seq_len,len(self.target_features))
+
+            for i in range(len(x)):
+                yield x[i], y[i]
+
+            del df, inputs, targets, x, y
+
+        con.close()

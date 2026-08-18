@@ -1,14 +1,13 @@
 import torch
 import torch.nn.functional as func
 
-from setup import StockGPT_cfg as cfg
+#from setup import StockGPT_cfg as cfg
 
 class MultiheadAttention(torch.nn.Module):
     """
     Creates a wide casual attention matrix and splits it
     """
-    def __init__(self, in_dim, out_dim, num_heads = C["n_heads"],
-                 qkv_bias = C["qkv_bias"], mx_sql = C["seq_len"]):
+    def __init__(self, in_dim, out_dim, num_heads, qkv_bias, mx_sql):
         super().__init__()
         assert (out_dim % num_heads == 0)
         self.out_dim = out_dim
@@ -64,7 +63,8 @@ class StockTransformer(torch.nn.Module):
     def __init__(self, cfg):
         super().__init__()
         self.ln1 = LayerNorm(cfg["output_dim"])
-        self.mha = MultiheadAttention(cfg["output_dim"], cfg["output_dim"], cfg["n_heads"])
+        self.mha = MultiheadAttention(cfg["output_dim"], cfg["output_dim"], cfg["n_heads"],
+                                      cfg["qkv_bias"], cfg["seq_len"])
         self.ln2 = LayerNorm(cfg["output_dim"])
         self.ff = FeedForward(cfg["output_dim"])
 
@@ -74,7 +74,7 @@ class StockTransformer(torch.nn.Module):
         return x
 
 class StockGPT(torch.nn.Module):
-    def __init__(self, cfg, train_norms, print_norms = False):
+    def __init__(self, cfg, train_norms, print_norms = True):
         super().__init__()
         self.cfg = cfg
         self.checkpoint_path = cfg["checkpoint_path"]
@@ -91,8 +91,8 @@ class StockGPT(torch.nn.Module):
         self.register_buffer("target_mean", train_norms[2])
         self.register_buffer("target_std", train_norms[3])
         if print_norms:
-            print((f"Input Norm: {self.input_mean}|{self.input_std}\n"
-                   f"Target Norm: {self.target_mean}|{self.target_std}"))
+            print((f"Input Norm: {self.input_mean.size()}|{self.input_std.size()}\n"
+                   f"Target Norm: {self.target_mean.size()}|{self.target_std.size()}"))
 
     def forward(self, x):
         bs, sql, _ = x.shape            #! This is for later making predictions off bs=1, sql<25
@@ -142,8 +142,8 @@ class NaiveModel(torch.nn.Module):
         return x[:, :, self.target_indices] #* Drops columns from input features I don't need to predict
 
 if __name__ == "__main__":
-    naive = LinearModel(C, [torch.ones(25), torch.zeros(25), torch.ones(25), torch.zeros(25)])
-    test_data = torch.rand(1, 25, 13)
+    naive = LinearModel(cfg, [torch.ones(36), torch.zeros(36), torch.ones(36), torch.zeros(36)])
+    test_data = torch.rand(1, 36, 36)
     print(test_data)
     print(test_data.shape)
     test_predict = naive(test_data)
