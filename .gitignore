@@ -1,5 +1,5 @@
 raw_data/
-imputed_raw_data/
+filled_raw_data/
 preprocessed_data/
 model_parameters/
 best_models/

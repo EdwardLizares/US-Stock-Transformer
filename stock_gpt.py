@@ -17,7 +17,6 @@ class MultiheadAttention(torch.nn.Module):
         self.W_k = torch.nn.Linear(in_dim, out_dim, qkv_bias)
         self.W_v = torch.nn.Linear(in_dim, out_dim, qkv_bias)
         self.out_proj = torch.nn.Linear(out_dim, out_dim)
-        self.register_buffer("c_mask", torch.triu(torch.ones(mx_sql, mx_sql), diagonal=1))
 
     def forward(self, x):
         bs, sql, _ = x.shape            #! This is for later making predictions off bs=1, sql<25
@@ -110,6 +109,7 @@ class LinearModel(torch.nn.Module):
     """
     def __init__(self, cfg, train_norms):
         super().__init__()
+        self.cfg = cfg
         self.register_buffer("input_mean", train_norms[0])
         self.register_buffer("input_std", train_norms[1])
         self.register_buffer("target_mean", train_norms[2])

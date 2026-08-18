@@ -1,5 +1,6 @@
 import torch
 import numpy as np
+import pyarrow as pa
 
 from torch.utils.data import DataLoader
 from pathlib import Path
@@ -38,8 +39,8 @@ def calculate_training_norms(source_folder, input_features, target_features):
 
     input_mean = input_sum / n
     target_mean = target_sum / n
-    input_std = np.sqrt(input_sq_sum - input_mean**2)
-    target_std = np.sqrt(target_sq_sum - target_mean**2)
+    input_std = np.sqrt(input_sq_sum / n - input_mean**2)
+    target_std = np.sqrt(target_sq_sum / n - target_mean**2)
 
     for col in ("f", "fb"):
         if col in input_features:
@@ -65,7 +66,7 @@ def build_dataloaders(source_folder: str,
     """
     Returns a dictionary of train-val-test dataloaders and the training norms
     """
-    train_norms = calculate_training_norms(f"{source_folder}/test", input_features, target_features)
+    train_norms = calculate_training_norms(f"{source_folder}/train", input_features, target_features)
     datasets = {subfolder.name : StockDataset(subfolder) for subfolder in list(Path(source_folder).glob("*/"))}
 
     print(f"Building DataLoaders...")
@@ -76,6 +77,3 @@ def build_dataloaders(source_folder: str,
 
 if __name__ == "__main__":
     dataloaders, train_norms = build_dataloaders(path_data_preprocessor)
-    trdli = iter(train_dl)
-    tr_inputs, tr_targets = next(trdli)
-    print(tr_inputs)

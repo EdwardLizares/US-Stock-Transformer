@@ -5,7 +5,7 @@ import pandas as pd
 from tqdm import tqdm
 from pathlib import Path 
 
-from setup import AVG_VOLUME_PERIOD, RV_THRESH, MN, MX, BAR_PER_DAY, INPUT_FEATURES
+from setup import AVG_VOLUME_PERIOD, RV_THRESH, MN, MX, BAR_PER_DAY, INPUT_FEATURES, DATE_RANGE, SPLIT
 from setup import path_data_filler, path_data_preprocessor
 
 class ProcessingError(Exception):
@@ -74,25 +74,35 @@ def filter_data(df: pd.DataFrame, pbar) -> pd.DataFrame:
 
     return df
 
-def preprocess_data(source_folder: str, output_folder: str):
+def preprocess_data(source_folder: str, output_folder: str, date_range, split):
     """
-    Takes a folder with train-val-test subfolders 
-    Creates a folder of .parquet files
+    Takes a folder with raw parquet files and splits each folder by date into train-val-test folders
     """
-    assert {p.name for p in Path(source_folder).glob("*/")} == {"test", "train", "val"}, "Incorrect source folder format"
-    os.makedirs(output_folder, exist_ok=True)
-    folders = list(Path(source_folder).glob("*/"))
-    file_paths = []
-    for folder in folders:
-        paths = Path(folder).glob("*.parquet")
-        file_paths += [p for p in paths]
+    #* GET TRAIN/VAL/TEST DATE BOUNDARIES
+    dates = date_range.date
 
+    train_idx = int(len(dates) * split[0])
+    val_idx = int(len(dates) * split[1])
+    train_end = dates[train_idx]
+    val_end = dates[val_idx]
+
+    #* CREATE OUTPUT FOLDERS
+    output_folder = Path(output_folder)
+    for split_name in ["train", "val", "test"]:
+        (output_folder / split_name).mkdir(parents=True, exist_ok=True)
+
+    file_paths = sorted(Path(source_folder).glob("*.parquet"))
     pbar = tqdm(file_paths, f"Setting up...".ljust(80),
                 bar_format="|{bar}| {percentage:3.1f}% ({elapsed}) {desc}")
     for imputed_batch_path in pbar:
-        if Path(f"{output_folder}/{imputed_batch_path.stem}.arrow").exists():
-            pbar.write(f"{str(imputed_batch_path)} has already been preprocessed...")
-            continue #* Doesn't recalculate
+        output_paths = {
+            split_name: output_folder/ split_name / imputed_batch_path.with_suffix(".arrow").name
+            for split_name in ["train", "val", "test"]
+        }
+        if all(path.exists() for path in output_paths.values()):
+            pbar.write(f"{imputed_batch_path} has already been preprocessed...")
+            continue
+
         pbar.set_description(f"Reading source path parquet at {str(imputed_batch_path)}...".ljust(80))
         df = pd.read_parquet(imputed_batch_path)
 
@@ -104,20 +114,22 @@ def preprocess_data(source_folder: str, output_folder: str):
         float_cols = df.select_dtypes(include=["float64"]).columns
         df[float_cols] = df[float_cols].astype("float32")
 
-        #* Convert to arrow
-        table = pa.Table.from_pandas(df,preserve_index=False)
-        output_path = Path(output_folder) / imputed_batch_path.relative_to(source_folder)
-        output_path = output_path.with_suffix(".arrow")
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        if Path(output_path).exists():
-            pbar.set_description("File cannot be overwritten!")
-            continue
-        else:
-            pbar.set_description(f"Saving data to {output_path}...".ljust(80))
+        split_dfs = {"train": df[df["date"] <= train_end],
+                     "val": df[(df["date"] > train_end) & (df["date"] < val_end)],
+                     "test": df[df["date"] >= val_end]}
 
-        with pa.OSFile(str(output_path), "wb") as sink:
-            with pa.ipc.new_file(sink, table.schema) as writer:
-                writer.write_table(table)
+        for split_name, split_df in split_dfs.items():
+            output_path = output_paths[split_name]
+            if output_path.exists():
+                pbar.write(f"{output_path} already exists...")
+                continue
+            pbar.set_description(f"Saving {output_path}...".ljust(80))
+            table = pa.Table.from_pandas(split_df, preserve_index=False)
+
+            with pa.OSFile(str(output_path), "wb") as sink:
+                with pa.ipc.new_file(sink, table.schema) as writer:
+                    writer.write_table(table)
+
     pbar.set_description("Data preprocessing complete")
 
 def debug():
@@ -129,6 +141,6 @@ def debug():
     print(table)
 
 if __name__ == "__main__":
-    preprocess_data(path_data_filler, path_data_preprocessor)
+    preprocess_data(path_data_filler, path_data_preprocessor, DATE_RANGE, SPLIT)
     print(debug())
     

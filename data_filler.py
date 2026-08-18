@@ -18,58 +18,14 @@ def get_unix_timestamps(date_range: pd.DatetimeIndex, bar_width: int):
                     ).strftime("%H:%M")
         ], format="%Y-%m-%d %H:%M").tz_localize("America/New_York").as_unit("ms").astype("int64")
 
-def split_save(con, batch_num, train_end, train_path, val_end, val_path, test_path):
-    con.execute(f"""
-        COPY (
-            SELECT * EXCLUDE (c_ff, c_bf)
-            FROM batch
-            WHERE date <= DATE '{train_end}'
-        )
-        TO '{train_path}/batch{batch_num}.parquet'
-        (FORMAT PARQUET)
-    """)
-    con.execute(f"""
-        COPY (
-            SELECT * EXCLUDE (c_ff, c_bf)
-            FROM batch
-            WHERE date > DATE '{train_end}'
-                AND date < DATE '{val_end}'
-        )
-        TO '{val_path}/batch{batch_num}.parquet'
-        (FORMAT PARQUET)
-    """)
-    con.execute(f"""
-        COPY (
-            SELECT * EXCLUDE (c_ff, c_bf)
-            FROM batch
-            WHERE date >= DATE '{val_end}'
-        )
-        TO '{test_path}/batch{batch_num}.parquet'
-        (FORMAT PARQUET)
-    """)
-
-def impute_data(input_path, output_path, tickers, date_range, split = [0.75, 0.9]):
+def fill_data(input_path, output_path, tickers, date_range, split = [0.75, 0.9]):
     """
-    Corrects for missing intraday data and creates train-val-test splits by date with duckdb.
+    Corrects for missing intraday data
     """
     con = duckdb.connect()
     con.execute("SET memory_limit = '16GB'")
     con.execute("SET temp_directory = 'duckdb_temp'")
 
-    dates = date_range.date
-    train_idx = int(len(dates) * 0.75)
-    val_idx = int(len(dates) * 0.90)
-
-    train_end = dates[train_idx]
-    val_end = dates[val_idx]
-
-    train_path = f"{output_path}/train"
-    val_path = f"{output_path}/val"
-    test_path = f"{output_path}/test"
-    os.makedirs(train_path, exist_ok=True)
-    os.makedirs(val_path, exist_ok=True)
-    os.makedirs(test_path, exist_ok=True)
-    
     #* Creates a table of all the data
     con.execute(f"""
         CREATE TEMP TABLE raw_data AS
@@ -78,7 +34,7 @@ def impute_data(input_path, output_path, tickers, date_range, split = [0.75, 0.9
     """)
 
     batches_made, batch_exists, batch_limit, batch_count = 0, False, 1000, 0
-    timestamps_df = pd.DataFrame({"t": get_unix_timestamps(DATE_RANGE, BAR_WIDTH)})
+    timestamps_df = pd.DataFrame({"t": get_unix_timestamps(date_range, BAR_WIDTH)})
     pbar = tqdm(tickers, total=len(tickers), desc=f"Sending jobs to threads...".ljust(80),
                 bar_format="|{bar}| {percentage:3.1f}% ({elapsed}) {desc}")
     os.makedirs(output_path, exist_ok=True)
@@ -213,14 +169,27 @@ def impute_data(input_path, output_path, tickers, date_range, split = [0.75, 0.9
                 SELECT * FROM back_fill_step2
             """)
         if batch_count >= batch_limit:
-            split_save(con, batches_made, train_end, train_path, val_end, val_path, test_path)
+            con.execute(f"""
+                COPY (
+                    SELECT * EXCLUDE (c_ff, c_bf)
+                    FROM batch
+                )
+                TO '{output_path}/batch{batches_made}.parquet'
+                (FORMAT PARQUET)
+            """)
             con.execute("""DROP TABLE batch""")
             batch_exists = False
             batches_made += 1
             batch_count = 0
     if batch_exists:
-        split_save(con, batches_made, train_end, train_path, val_end, val_path, test_path)
-
+        con.execute(f"""
+            COPY (
+                SELECT * EXCLUDE (c_ff, c_bf)
+                FROM batch
+            )
+            TO '{output_path}/batch{batches_made}.parquet'
+            (FORMAT PARQUET)
+        """)
 def debug(source_path):
     db = duckdb.sql(f"""
         SELECT *
@@ -231,5 +200,5 @@ def debug(source_path):
 if __name__ == "__main__":
     with open("raw_data/all_tickers_trimmed_1_30", "r") as f:
         tickers = json.load(f)
-    impute_data(path_data_scrapper, path_data_filler, tickers, DATE_RANGE)
+    fill_data(path_data_scrapper, path_data_filler, tickers, DATE_RANGE)
     #print(debug(path_data_filler))
