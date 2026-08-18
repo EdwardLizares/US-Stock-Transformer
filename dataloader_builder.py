@@ -1,93 +1,81 @@
-import duckdb
-import pandas as pd 
-
 import torch
-from torch.utils.data import DataLoader
+import numpy as np
 
-from setup import SPLIT, INPUT_FEATURES, TARGET_FEATURES, BATCH_SIZE, NUM_WORKERS, PERSISTENT_WORKERS
+from torch.utils.data import DataLoader
+from pathlib import Path
+
+from setup import INPUT_FEATURES, TARGET_FEATURES, BATCH_SIZE, NUM_WORKERS, PERSISTENT_WORKERS
 from setup import path_data_preprocessor
-from setup import StockGPT_cfg as C
 from stock_dataset import StockDataset
 
-def train_val_test_split(source_folder, split: list[int] = [0.75, 0.90]) -> dict[str]:
+def calculate_training_norms(source_folder, input_features, target_features):
     """
-    Returns WHERE conditionals to append to connection calls for train, val, and test as a dictionary
+    Expects source folder to be all train arrow files and returns all calculated norms
     """
-    #* Fetches all dates
-    dates = duckdb.sql(f"""
-        SELECT DISTINCT date
-        FROM read_parquet('{source_folder}/*.parquet')
-        ORDER BY date
-    """).fetchall()
+    #* Accumulates across all train files
+    input_sum = np.zeros(len(input_features), dtype=np.float64)
+    input_sq_sum = np.zeros(len(input_features), dtype=np.float64)
+    target_sum = np.zeros(len(target_features), dtype=np.float64)
+    target_sq_sum = np.zeros(len(target_features), dtype=np.float64)
+    n = 0
 
-    dates = [x[0] for x in dates]
-    train_idx = int(len(dates) * split[0])
-    val_idx   = int(len(dates) * split[1])
-    train_end = dates[train_idx]
-    val_end   = dates[val_idx]
+    for file_path in Path(source_folder).glob("*.arrow"):
+        with pa.memory_map(str(file_path), "r") as source:
+            table = pa.ipc.open_file(source).read_all()
 
-    return {"train": f"date <= DATE '{train_end}'",
-            "val": f"date < DATE '{val_end}' AND date > DATE '{train_end}'",
-            "test": f"date >= DATE '{val_end}'"}
+            x = np.column_stack(
+                [table[col].to_numpy() for col in input_features]
+            ).astype(np.float64, copy=False)
+            y = np.column_stack(
+                [table[col].to_numpy() for col in target_features]
+            ).astype(np.float64, copy=False)
 
-def calculate_training_norms(source_folder, train_cond: str):
-    stats_cols = []
-    #* SELECT TO CALCULATE/SET INPUT AVG
-    for col in INPUT_FEATURES:
-        if col in ["f", "fb"]:
-            stats_cols.append(f"0 AS input_mean_{col}")
-        else:
-            stats_cols.append(f"AVG({col}) AS input_mean_{col}")
-    #* SELECT TO CALCULATE/SET INPUT STD
-    for col in INPUT_FEATURES:
-        if col in ["f", "fb"]:
-            stats_cols.append(f"1 AS input_std_{col}")
-        else:
-            stats_cols.append(f"STDDEV_SAMP({col}) AS input_std_{col}")
-    #* SELECT TO CALCULATE/SET TARGET AVG
-    for col in TARGET_FEATURES:
-        stats_cols.append(f"AVG({col}) AS target_mean_{col}")
-    #* SELECT TO CALCULATE/SET INPUT STD
-    for col in TARGET_FEATURES:
-        stats_cols.append(f"STDDEV_SAMP({col}) AS target_std_{col}")
-    stats_cols = ", ".join(stats_cols)
+            input_sum += x.sum(axis=0)
+            target_sum += y.sum(axis=0)
+            input_sq_sum += (x ** 2).sum(axis=0)
+            target_sq_sum += (y ** 2).sum(axis=0)
+            n += len(x)
 
-    con = duckdb.connect()
-    stats = con.execute(f"""
-        SELECT {stats_cols}
-        FROM read_parquet('{source_folder}/*.parquet')
-        WHERE {train_cond}
-    """).fetchone()
-    con.close()
+    input_mean = input_sum / n
+    target_mean = target_sum / n
+    input_std = np.sqrt(input_sq_sum - input_mean**2)
+    target_std = np.sqrt(target_sq_sum - target_mean**2)
 
-    ni = len(INPUT_FEATURES)
-    nt = len(TARGET_FEATURES)
+    for col in ("f", "fb"):
+        if col in input_features:
+            i = input_features.index(col)
+            input_mean[i] = 0.0
+            input_std[i] = 1.0
 
-    input_mean = stats[:ni]
-    input_std = stats[ni:2*ni]
-    target_mean = stats[2*ni:2*ni + nt]
-    target_std = stats[2*ni + nt:]
-    #print(input_mean, input_std, target_mean, target_std)
-    return [torch.tensor(x, dtype=torch.float32)
-            for x in (input_mean, input_std, target_mean, target_std)]
+    return [
+        torch.tensor(input_mean, dtype=torch.float32),
+        torch.tensor(input_std, dtype=torch.float32),
+        torch.tensor(target_mean, dtype=torch.float32),
+        torch.tensor(target_std, dtype=torch.float32),
+    ]
 
-def build_dataloaders(source_folder: str, split: str = SPLIT,
-                      batch_size = BATCH_SIZE, drop_last = True,
-                      num_workers = NUM_WORKERS, pin_memory = True, persistent_workers = PERSISTENT_WORKERS):
-    print(f"Creating VIEW object from parquets in {source_folder}...")
-    split_cond = train_val_test_split(source_folder, split)
-    train_norms = calculate_training_norms(source_folder, split_cond["train"])
-    datasets = [StockDataset(source_folder, split_cond[key]) for key in split_cond.keys()]
+def build_dataloaders(source_folder: str, 
+                      input_features = INPUT_FEATURES, 
+                      target_features = TARGET_FEATURES,
+                      batch_size = BATCH_SIZE,
+                      drop_last = True,
+                      num_workers = NUM_WORKERS,
+                      pin_memory = True,
+                      persistent_workers = PERSISTENT_WORKERS):
+    """
+    Returns a dictionary of train-val-test dataloaders and the training norms
+    """
+    train_norms = calculate_training_norms(f"{source_folder}/test", input_features, target_features)
+    datasets = {subfolder.name : StockDataset(subfolder) for subfolder in list(Path(source_folder).glob("*/"))}
 
     print(f"Building DataLoaders...")
-    train_dl, val_dl, test_dl = [DataLoader(ds, batch_size = batch_size, drop_last = drop_last, num_workers = num_workers,
-                                            pin_memory = pin_memory, persistent_workers=persistent_workers
-                                            ) for ds in datasets] #! HARD CODED STUFF
-
-    return train_dl, val_dl, test_dl, train_norms
+    dataloaders = {ds_key : DataLoader(datasets[ds_key], batch_size = batch_size, drop_last = drop_last, 
+                                       num_workers = num_workers, persistent_workers=persistent_workers,
+                                       pin_memory = pin_memory) for ds_key in datasets.keys()}
+    return dataloaders, train_norms
 
 if __name__ == "__main__":
-    train_dl, val_dl, test_dl, train_norms = build_dataloaders(path_data_preprocessor)
+    dataloaders, train_norms = build_dataloaders(path_data_preprocessor)
     trdli = iter(train_dl)
     tr_inputs, tr_targets = next(trdli)
     print(tr_inputs)

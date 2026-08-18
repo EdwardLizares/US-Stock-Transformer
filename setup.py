@@ -22,7 +22,7 @@ BAR_WIDTH = 5                                                           # OHLC B
 #           "ema20", "o", "c", "h", "l", "n", 
 #           "rv", "gp", "fb"]                                            #! Recent Change: Removed y
 
-path_data_filler = f"filled_raw_data/{FILE_NAME}"               #*Output path of data_filler_db.py
+path_data_filler = f"imputed_raw_data/{FILE_NAME}"               #*Output path of data_filler_db.py
 
 # Data Preprocessor ------------------------------------------------------------------------------------
 BAR_PER_DAY = 26*3
