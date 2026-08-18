@@ -84,7 +84,7 @@ class StockGPT(torch.nn.Module):
             *[StockTransformer(cfg) for _ in range(cfg["n_transformers"])]
         )
         self.final_norm = LayerNorm(cfg["output_dim"])
-        self.out_head = torch.nn.Linear(cfg["output_dim"], len(cfg["target_features"]), False)
+        self.out_head = torch.nn.Linear(cfg["output_dim"], 2*len(cfg["target_features"]), False)
         self.register_buffer("input_mean", train_norms[0])
         self.register_buffer("input_std", train_norms[1])
         self.register_buffer("target_mean", train_norms[2])
@@ -94,14 +94,17 @@ class StockGPT(torch.nn.Module):
                    f"Target Norm: {self.target_mean.size()}|{self.target_std.size()}"))
 
     def forward(self, x):
-        bs, sql, _ = x.shape            #! This is for later making predictions off bs=1, sql<25
+        _, sql, _ = x.shape            #! This is for later making predictions off bs=1, sql<25
         x = ( x - self.input_mean ) / self.input_std
         proj = self.input_proj(x)
         pos_emb = self.pos_emb(torch.arange(sql, device=x.device))
         x = proj + pos_emb
         x = self.transformer_blocks(x)
         x = self.final_norm(x)
-        return self.out_head(x)
+        x = self.out_head(x)
+        mean, raw_std = x.chunk(2, dim=-1)
+        std = torch.nn.functional.softplus(raw_std) + 1e-6
+        return mean, std
 
 class LinearModel(torch.nn.Module):
     """
@@ -117,13 +120,15 @@ class LinearModel(torch.nn.Module):
         self.checkpoint_path = cfg["checkpoint_path"]
         self.best_path = cfg["best_path"]        
         self.linear_layer = torch.nn.Linear(len(cfg["input_features"]), cfg["output_dim"])
-        self.out_head = torch.nn.Linear(cfg["output_dim"], len(cfg["target_features"]), False)
+        self.out_head = torch.nn.Linear(cfg["output_dim"], 2*len(cfg["target_features"]), False)
 
     def forward(self, x):
         x = ( x - self.input_mean ) / self.input_std
         x = self.linear_layer(x)
         x = self.out_head(x)
-        return x
+        mean, raw_std = x.chunk(2, dim=-1)
+        std = torch.nn.functional.softplus(raw_std) + 1e-6
+        return mean, std
 
 class NaiveModel(torch.nn.Module):
     def __init__(self, cfg, train_norms):
@@ -139,7 +144,9 @@ class NaiveModel(torch.nn.Module):
 
     def forward(self, x):
         x = (x - self.input_mean) / self.input_std
-        return x[:, :, self.target_indices] #* Drops columns from input features I don't need to predict
+        mean = x[:, :, self.target_indices]
+        std = torch.ones_like(mean)
+        return mean, std  #* Drops columns from input features I don't need to predict
 
 if __name__ == "__main__":
     naive = LinearModel(cfg, [torch.ones(36), torch.zeros(36), torch.ones(36), torch.zeros(36)])

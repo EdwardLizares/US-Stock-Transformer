@@ -35,10 +35,9 @@ SPLIT = [0.75, 0.9, 1]
 BATCH_SIZE = 256
 NUM_WORKERS = 2
 PERSISTENT_WORKERS = True
-INPUT_FEATURES = ["bar", "vw", "ema9", "ema20", "macd", "o", "c", "h", "l",
+INPUT_FEATURES = ["bar", "vw", "ema9", "ema20", "macd", "o", "h", "l", "c",
                   "n", "rv", "f", "fb"]
-TARGET_FEATURES = ["vw", "ema9", "ema20", "macd", "o", "c", "h", "l",
-                   "n", "rv"]
+TARGET_FEATURES = ["o", "h", "l", "c"]
 
 # Stock GPT -----------------------------------------------------------------------------------------
 SEQ_LEN = BAR_PER_DAY - 1
@@ -46,7 +45,7 @@ STEP = 1
 OUTPUT_DIM = 256
 
 StockGPT_cfg = {
-    "name": "stock_gpt_v1",
+    "name": "StockGPT",
     "checkpoint_path": "model_parameters/checkpoint_stock_gpt_5min",
     "best_path": "model_parameters/best_stock_gpt_5min",
     "input_features": INPUT_FEATURES,
@@ -61,7 +60,7 @@ StockGPT_cfg = {
 }
 
 LinearModel_cfg = {
-    "name": "linear_model",
+    "name": "LinearModel",
     "checkpoint_path": "model_parameters/checkpoint_linear_model_5min",
     "best_path": "model_parameters/best_linear_model_5min",
     "input_features": INPUT_FEATURES,
