@@ -23,6 +23,10 @@ def setup_model(source_model: Path):
     return model, device
 
 def query_model(model, x):
+    """
+    Expects (bs, sql, 13)
+    Returns the predicted next column per ticker in batch
+    """
     device = next(model.parameters()).device
     x = x.to(device)
 
@@ -30,9 +34,10 @@ def query_model(model, x):
         mean, std = model(x)
         mean = mean * model.target_std + model.target_mean
         std = std * model.target_std
-    return mean, std
+    return mean[:,-1,:], std[:,-1,:]
 
 if __name__ == "__main__":
     model, device = setup_model("model_parameters/checkpoint_stock_gpt_5min")
-    mean, std = query_model(model, torch.randn(1, 77, len(StockGPT_cfg["input_features"])))
+    mean, std = query_model(model, torch.randn(2, 77, len(StockGPT_cfg["input_features"])))
     print(mean, std)
+    print(mean.shape)

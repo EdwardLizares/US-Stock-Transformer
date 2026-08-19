@@ -13,23 +13,36 @@ def get_all_tickers(path: str, api_key: str) -> list[str]:
     try:
         with open(path, "r") as f:
             return json.load(f)
-    except FileNotFoundError as _:
+    except FileNotFoundError:
         tickers = []
-        url = f"https://api.massive.com/v3/reference/tickers?market=stocks&active=true&limit=1000&apiKey={api_key}"
 
-        while url:
-            response = requests.get(url, timeout=30)
-            response.raise_for_status()
-            resp = response.json()
+        for ticker_type in ("CS", "ETF"):
+            url = (
+                "https://api.massive.com/v3/reference/tickers"
+                f"?market=stocks"
+                f"&type={ticker_type}"
+                f"&active=true"
+                f"&limit=1000"
+                f"&apiKey={api_key}"
+            )
 
-            tickers.extend([r["ticker"] for r in resp.get("results", [])])
+            while url:
+                response = requests.get(url, timeout=30)
+                response.raise_for_status()
+                resp = response.json()
 
-            next_url = resp.get("next_url")
-            url = f"{next_url}&apiKey={api_key}" if next_url else None
+                tickers.extend([
+                    r["ticker"] for r in resp.get("results", [])
+                ])
 
-        with open(path, "w", encoding='utf-8') as f:
+                next_url = resp.get("next_url")
+                url = f"{next_url}&apiKey={api_key}" if next_url else None
+
+        with open(path, "w", encoding="utf-8") as f:
             json.dump(tickers, f)
-            return tickers
+
+        print(f"CS + ETFs: {len(tickers)}")
+        return tickers
 
 def gen_aggregate_url(api_key: str, date: str):
     return f"https://api.massive.com/v2/aggs/grouped/locale/us/market/stocks/{date}?apiKey={api_key}"
@@ -78,7 +91,7 @@ def filter_ticker_list_by_price_range(path: str, date_range: pd.DatetimeIndex,
     pbar = tqdm(date_range, total=n, desc=f"Sending jobs to threads...".ljust(80),
                 bar_format="|{bar}| {percentage:3.1f}% ({elapsed}) {desc}")
     with ThreadPoolExecutor(max_workers=20) as executor:
-        thread_jobs = {executor.submit(aggregate_scrapper_unit, dstr.strftime("%Y-%m-%d")): dstr.strftime("%Y-%m-%d") for dstr in date_range}
+        thread_jobs = {executor.submit(aggregate_scrapper_unit, API_KEY, dstr.strftime("%Y-%m-%d")): dstr.strftime("%Y-%m-%d") for dstr in date_range}
         for job in as_completed(thread_jobs): # --> runs as jobs are completed
             dstr = thread_jobs[job]
             res = job.result() # (Success? DF, rqt time, pt_time)
@@ -132,6 +145,8 @@ def data_scrapper(api_key:str, output_path: str,
     pbar.set_description_str("Data fetching completed")
     data.to_parquet(f"{output_path}", index=False)
     return data
+import requests
+import pandas as pd
 
 if __name__ == "__main__":
     all_tickers = get_all_tickers(path_raw_all_tickers, API_KEY)

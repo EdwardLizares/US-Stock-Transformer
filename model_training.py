@@ -113,7 +113,7 @@ def train_model_cuda(model, device, optimizer, cuda_scaler, scheduler, max_epoch
     pbar.write((f"Epoch {epoch+1}:\n"))
     try:
         for epoch in range(epoch, max_epochs):
-            pbar.write(f"Learning Rate: {optimizer.param_groups[0]["lr"]:.2e}\n")
+            pbar.write(f"Learning Rate: {optimizer.param_groups[0]['lr']:.2e}\n")
             #* TRAINS MODEL
             model.train()
             for x, y in train_dl:
