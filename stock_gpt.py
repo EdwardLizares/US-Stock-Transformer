@@ -73,7 +73,7 @@ class StockTransformer(torch.nn.Module):
         return x
 
 class StockGPT(torch.nn.Module):
-    def __init__(self, cfg, train_norms, print_norms = True):
+    def __init__(self, cfg, train_norms = None, print_norms = True):
         super().__init__()
         self.cfg = cfg
         self.checkpoint_path = cfg["checkpoint_path"]
@@ -85,10 +85,20 @@ class StockGPT(torch.nn.Module):
         )
         self.final_norm = LayerNorm(cfg["output_dim"])
         self.out_head = torch.nn.Linear(cfg["output_dim"], 2*len(cfg["target_features"]), False)
+
+        if train_norms is None:
+            train_norms = (
+                torch.zeros(len(cfg["input_features"])),
+                torch.ones(len(cfg["input_features"])),
+                torch.zeros(len(cfg["target_features"])),
+                torch.ones(len(cfg["target_features"])),
+            )
+
         self.register_buffer("input_mean", train_norms[0])
         self.register_buffer("input_std", train_norms[1])
         self.register_buffer("target_mean", train_norms[2])
         self.register_buffer("target_std", train_norms[3])
+
         if print_norms:
             print((f"Input Norm: {self.input_mean.size()}|{self.input_std.size()}\n"
                    f"Target Norm: {self.target_mean.size()}|{self.target_std.size()}"))
