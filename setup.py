@@ -72,6 +72,8 @@ SEQ_LEN = BAR_PER_DAY - 1
 STEP = 1
 OUTPUT_DIM = 256
 
+PATH_RESULTS = "results"
+
 StockGPT_cfg = {
     "name": f"StockGPT-B{PRESETS[ID]['bar_width']}",
     "checkpoint_path": f"model_parameters/checkpoint_stock_gpt_{ID}min",

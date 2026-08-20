@@ -1,4 +1,8 @@
+import os
 import torch
+import pandas as pd
+
+from pathlib import Path
 
 from model_training import eval_loss
 
@@ -47,3 +51,44 @@ def test_model(test_dl, model, device, eval_bs, pbar=None):
     with torch.no_grad():
         test_metrics = eval_loss(test_dl, model, device, eval_bs, pbar, desc="Evaluating model on testing data...")
     return (test_metrics,)
+
+def store_result(output_path, new_data):
+    os.makedirs("results", exist_ok=True)
+    df = pd.read_parquet(output_path) if Path(output_path).exists() else pd.DataFrame(
+        columns = [
+            "model",
+            "bar_width",
+            "train",
+            "val",
+            "test",
+            "epoch",
+            "file_limit"
+        ]
+    )
+    confirm = ""
+    while confirm not in ('y', 'n'):
+        print(new_data)
+        confirm = input("Enter this data? (y/n)")
+        if confirm == 'y':
+            confirm = input("Are you sure? (y/n)")
+            if confirm == 'y':
+                df.loc[len(df)] = new_data
+            else:
+                break
+        else:
+            break
+    df.to_parquet(output_path)
+
+def process_result(model, train_val, test_loss, epoch, file_limit):
+    """
+    Outputs a list of dictionaries
+    """
+    return {
+        "model": model.cfg["name"],
+        "bar_width": model.cfg["name"].split('-')[1][1:],
+        "train": train_val[0],
+        "val": train_val[1],
+        "test": test_loss,
+        "epoch": epoch,
+        "file_limit": file_limit,
+    }
