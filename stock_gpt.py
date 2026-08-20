@@ -143,6 +143,7 @@ class LinearModel(torch.nn.Module):
 class NaiveModel(torch.nn.Module):
     def __init__(self, cfg, train_norms):
         super().__init__()
+        self.cfg = cfg
         self.register_buffer("input_mean", train_norms[0])
         self.register_buffer("input_std", train_norms[1])
         self.register_buffer("target_mean", train_norms[2])

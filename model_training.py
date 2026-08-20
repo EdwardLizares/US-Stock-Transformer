@@ -30,24 +30,32 @@ def eval_loss(data_loader, model, device, max_batches = float("inf"), pbar = Non
         p = p.to(device, non_blocking=True)
         t = t.to(device, non_blocking=True)
 
-        #* MAE
-        mean, std = model(p)
-        t_norm = (t - model.target_mean) / model.target_std
-        mae = torch.abs(mean - t_norm)
+        with torch.autocast(device_type="cuda", dtype=torch.float16):
+            mean, std = model(p)
+
+            t_norm = (t - model.target_mean) / model.target_std
+
+            #* MAE per target column
+            mae = torch.abs(mean - t_norm).mean(dim=(0, 1))
+
+            #* PMAE per target column
+            t_real = mean * model.target_std + model.target_mean
+            pmae = (
+                torch.abs(t_real - t)
+                / torch.abs(t).clamp_min(1e-8)
+                * 100
+            ).mean(dim=(0, 1))
+
+            #* NLL per target column
+            dist = torch.distributions.Normal(mean, std)
+            nll = -dist.log_prob(t_norm).mean(dim=(0, 1))
+
+            #* Predicted STD per target column
+            col_std = std.mean(dim=(0, 1))
+
         avg_mae += (mae - avg_mae) / (i+1)
-
-        #* MAE %
-        t_real = mean * model.target_std + model.target_mean
-        pmae = torch.abs(t_real - t) / torch.abs(t).clamp_min(1e-8) * 100
         avg_pmae += (pmae - avg_pmae) / (i+1)
-
-        #*NLL
-        dist = torch.distributions.Normal(mean, std)
-        nll = -dist.log_prob(t_norm)
         avg_nll += (nll - avg_nll) / (i+1)
-
-        #*STD
-        col_std = std.mean(dim=(0, 1))
         avg_std += (col_std - avg_std) / (i+1)
 
         if pbar is not None:
@@ -71,7 +79,7 @@ def evaluate_model(train_dl, val_dl, model, device, eval_bs, pbar = None):
     """
     Returns a list of dictionaries, with each dictionary correspoding to a function in eval_fns
     """
-    with torch.no_grad():
+    with torch.inference_mode():
         train_metrics = eval_loss(train_dl, model, device, eval_bs, pbar,
                                     desc="Evaluating model on training data...")
         val_metrics = eval_loss(val_dl, model, device, eval_bs, pbar,
@@ -122,14 +130,14 @@ def train_model_cuda(model, device, optimizer, cuda_scaler, scheduler, max_epoch
                 optimizer.zero_grad(set_to_none=True)
 
                 with torch.autocast(device_type="cuda",dtype=torch.float16):
-                    loss = batch_loss(x, y, model).mean()
+                    loss = batch_loss(x, y, model)
                 cuda_scaler.scale(loss).backward()
                 cuda_scaler.step(optimizer)
                 cuda_scaler.update()
 
                 pbar.update(1)
                 if (pbar.n % max(1,int(pbar.total*0.001))==0):
-                    pbar.set_description(f"Training the {model.cfg['name']}... [{pbar.n}/{pbar.total}]")
+                    pbar.set_description(f"Training {model.cfg['name']}... [{pbar.n}/{pbar.total}]")
 
             #* EVALUATES MODEL
             model.eval()

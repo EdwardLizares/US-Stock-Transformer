@@ -8,7 +8,7 @@ from pathlib import Path
 from setup import StockGPT_cfg as cfg
 
 class StockDataset(Dataset):
-    def __init__(self, source_folder, seq_len: int = cfg["seq_len"],
+    def __init__(self, source_folder, file_limit = cfg["file_limit"], seq_len: int = cfg["seq_len"],
                  step: int = cfg["step"], bar_per_day = cfg["bar_per_day"],
                  input_features: list = cfg["input_features"], target_features: list = cfg["target_features"]):
         """
@@ -28,7 +28,7 @@ class StockDataset(Dataset):
         #* Number of windows produced by one ticker-day
         self.samples_per_day = (bar_per_day - seq_len - step + 1)
 
-        self.files = sorted(self.source_folder.glob("*.arrow"))
+        self.files = sorted(self.source_folder.glob("*.arrow"))[:file_limit]
 
         self.samples_per_file = []
         for file_path in self.files:

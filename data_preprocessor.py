@@ -13,34 +13,34 @@ class ProcessingError(Exception):
 
 def calculate_additional_hyperparameters(df: pd.DataFrame, pbar) -> pd.DataFrame:
     pbar.set_description("Doing some feature engineering...".ljust(80))
-    df = df.sort_values(["T_1", "t"])
+    df = df.sort_values(["Tk", "t"])
     df["av"] = (
-        df.groupby("T_1")["v"].transform(
+        df.groupby("Tk")["v"].transform(
             lambda x: x.rolling(AVG_VOLUME_PERIOD).mean()
             )
         )
     df["ema9"] = (
-        df.groupby("T_1")["c"].transform(
+        df.groupby("Tk")["c"].transform(
             lambda x: x.ewm(span=9, adjust=False).mean()
         )
     )
     df["ema20"] = (
-        df.groupby("T_1")["c"].transform(
+        df.groupby("Tk")["c"].transform(
             lambda x: x.ewm(span=20, adjust=False).mean()
         )
     )
     df["ema12"] = (
-        df.groupby("T_1")["c"].transform(
+        df.groupby("Tk")["c"].transform(
             lambda x: x.ewm(span=12, adjust=False).mean()
         )
     )
     df["ema26"] = (
-        df.groupby("T_1")["c"].transform(
+        df.groupby("Tk")["c"].transform(
             lambda x: x.ewm(span=26, adjust=False).mean()
         )
     )
     df["macd"] = (df["ema12"]-df["ema26"])
-    p_c = df.groupby("T_1")["c"].shift(1)
+    p_c = df.groupby("Tk")["c"].shift(1)
     df["gp"] = (df["o"] - p_c) / p_c * 100
     df["cp"] = (df["c"] - df["o"]) / df["c"] * 100
     df["rv"] = df["v"] / df["av"]
@@ -48,7 +48,7 @@ def calculate_additional_hyperparameters(df: pd.DataFrame, pbar) -> pd.DataFrame
     #n_o = df.groupby("T_1")["o"].shift(-1)
     #df["y"] = (n_o > df["c"]).astype(int)
 
-    df["bar"] = df.groupby(["T_1", "date"]).cumcount() + 1
+    df["bar"] = df.groupby(["Tk", "date"]).cumcount() + 1
     df.insert(df.columns.get_loc("date") + 1, "bar", df.pop("bar"))
 
     return df
@@ -63,13 +63,13 @@ def filter_data(df: pd.DataFrame, pbar) -> pd.DataFrame:
     Additionally removes days with any NaN rv
     """
     pbar.set_description("Filtering data...".ljust(80))
-    rv_mask = (df.groupby(["T_1", "date"])["rv"].transform("max")>RV_THRESH)
+    rv_mask = (df.groupby(["Tk", "date"])["rv"].transform("max")>RV_THRESH)
     df = df[rv_mask]
-    pc_mask = ((df.groupby(["T_1", "date"])["l"].transform("min")<=MX) &
-               (df.groupby(["T_1", "date"])["h"].transform("min")>MN))
+    pc_mask = ((df.groupby(["Tk", "date"])["l"].transform("min")<=MX) &
+               (df.groupby(["Tk", "date"])["h"].transform("min")>MN))
     df = df[pc_mask]
 
-    nan_mask = (df.groupby(["T_1", "date"])["rv"].transform("count") < BAR_PER_DAY)
+    nan_mask = (df.groupby(["Tk", "date"])["rv"].transform("count") < BAR_PER_DAY)
     df = df[~nan_mask]
 
     return df
@@ -108,8 +108,8 @@ def preprocess_data(source_folder: str, output_folder: str, date_range, split):
 
         df = engineer_data(df, pbar)
         df = filter_data(df, pbar)
-        df = df.sort_values(["date", "T_1", "bar"])
-        df = df[INPUT_FEATURES+["T_1", "date"]]
+        df = df.sort_values(["date", "Tk", "bar"])
+        df = df[INPUT_FEATURES+["Tk", "date"]]
 
         float_cols = df.select_dtypes(include=["float64"]).columns
         df[float_cols] = df[float_cols].astype("float32")

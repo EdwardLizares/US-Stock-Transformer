@@ -2,6 +2,7 @@ import requests
 import json
 import pandas as pd
 import time
+import os
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
@@ -109,46 +110,76 @@ def filter_ticker_list_by_price_range(path: str, date_range: pd.DatetimeIndex,
         json.dump(trimmed_tickers, f)
         return trimmed_tickers
 
-def data_scrapper(api_key:str, output_path: str, 
+def data_scrapper(api_key:str, output_folder: str, batch_size,
                   ticker_list: list, date_range: pd.DatetimeIndex, time_frame: str) -> pd.DataFrame:
-    """
-    Returns a DataFrame of all the raw data scraped from Massive
-    Creates a .parquet of the DataFrame on first run
-    """
-    try:
-        return pd.read_parquet(output_path)
-    except FileNotFoundError as _:
-        pass
+
+    os.makedirs(output_folder, exist_ok=True)
+
     s, f, avg_rqt, n = 0, 0, 0, len(ticker_list)
     dfs = []
-    d_stt, d_end = date_range[[0,-1]].strftime("%Y-%m-%d")
-    pbar = tqdm(ticker_list, total=n, desc="Sending jobs to threads...".ljust(80),
-                bar_format="|{bar}| {percentage:3.1f}% ({elapsed}) {desc}")
-    
+    batch_num = 0
+    tickers_in_batch = 0
+
+    d_stt, d_end = date_range[[0, -1]].strftime("%Y-%m-%d")
+    pbar = tqdm(ticker_list, total=n, desc="Sending jobs to threads...".ljust(80), 
+                bar_format="|{bar}| {percentage:3.1f}% ({elapsed}) {desc}",)
     with ThreadPoolExecutor(max_workers=20) as executor:
-        thread_jobs = {executor.submit(range_scrapper_unit, api_key,
-                                       tkr, date_range, time_frame): tkr for tkr in ticker_list}
-        for job in as_completed(thread_jobs): # --> runs as jobs are completed
+        thread_jobs = {executor.submit(range_scrapper_unit, api_key, 
+                                       tkr, date_range, time_frame): tkr for tkr in ticker_list }
+
+        for job in as_completed(thread_jobs):
             tkr = thread_jobs[job]
-            res = job.result() # (Success? DF, rqt time, pt_time)
+            res = job.result()
+
             s += res[0]
-            f += (not res[0])
+            f += not res[0]
+
             if not res[1].empty:
-                res[1]["T"] = tkr
-                dfs.append(res[1])
+                df = res[1]
+                df["T"] = tkr
+                dfs.append(df)
+
             pbar.update(1)
-            avg_rqt = avg_rqt + (res[2]-avg_rqt)/pbar.n
-            pbar.set_description_str((f"[{f}/{s}/{n}] "
-                                      f"{{{avg_rqt:.1f}/r/t}} "
-                                      f"OHLC bars for {tkr} from {d_stt}-{d_end} added".ljust(80)))
-    data = pd.concat(dfs, ignore_index=True)
+            avg_rqt += (res[2] - avg_rqt) / pbar.n
+            pbar.set_description_str(
+                (f"[{f}/{s}/{n}] {{{avg_rqt:.1f}/r/t}}"
+                 f"OHLC bars for {tkr} from {d_stt}-{d_end} added").ljust(80))
+
+            tickers_in_batch += 1
+            if tickers_in_batch >= batch_size:
+                if dfs:
+                    data = pd.concat(dfs, ignore_index=True)
+                    batch_path = os.path.join(output_folder, f"batch_{batch_num:03d}.parquet")
+                    data.to_parquet(batch_path, index=False)
+
+                dfs.clear()
+                batch_num += 1
+                tickers_in_batch = 0
+
+    if dfs:
+        data = pd.concat(dfs, ignore_index=True)
+        batch_path = os.path.join(output_folder, f"batch_{batch_num:03d}.parquet")
+        data.to_parquet(batch_path, index=False,)
+
     pbar.set_description_str("Data fetching completed")
-    data.to_parquet(f"{output_path}", index=False)
-    return data
-import requests
-import pandas as pd
+    pbar.close()
+
+from pathlib import Path
 
 if __name__ == "__main__":
+    #print(pd.read_parquet("raw_data\data_1min_2025.parquet/batch_000.parquet"))
+    folder = Path("raw_data/data_1min_2025")
+    for path in folder.glob("*.parquet"):
+        print(f"Fixing {path.name}...")
+        df = pd.read_parquet(path)
+        # Remove columns we don't need
+        df = df.drop(columns=["otc"], errors="ignore")
+        # Keep exact schema
+        df = df[["v", "vw", "o", "c", "h", "l", "t", "n", "T"]]
+        # Overwrite original
+        df.to_parquet(path, index=False)
+        print("Done")
+
     all_tickers = get_all_tickers(path_raw_all_tickers, API_KEY)
     print(len(all_tickers))
     all_tickers_trimmed = filter_ticker_list_by_price_range(path_raw_tickers_trimmed,
@@ -156,11 +187,12 @@ if __name__ == "__main__":
                                                             MN,
                                                             MX)
     print(len(all_tickers_trimmed))
-    ds = data_scrapper(
+    data_scrapper(
         api_key=API_KEY,
-        output_path=path_data_scrapper,
+        output_folder=path_data_scrapper,
         ticker_list=all_tickers_trimmed,
         date_range=DATE_RANGE,
+        batch_size = 250,
         time_frame=TIMEFRAME,
     )
-    print(ds)
+

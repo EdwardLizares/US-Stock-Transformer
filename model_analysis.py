@@ -3,9 +3,7 @@ import torch
 from model_training import eval_loss
 
 def process_losses(losses: list[dict], key = "MAE Loss"):
-    if key == "STD":
-        return [loss_dict[key] for loss_dict in losses]
-    return [loss_dict[key].mean(dim=(0,1)) for loss_dict in losses]
+    return [loss_dict[key] for loss_dict in losses]
 
 def tensor_to_string(t, cs):
     return "".join(f"{v.item():<{cs}.4f}" for v in t)
