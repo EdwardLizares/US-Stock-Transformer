@@ -37,7 +37,7 @@ def query_model(model, x):
     return mean[:,-1,:], std[:,-1,:]
 
 if __name__ == "__main__":
-    model, device = setup_model("model_parameters/checkpoint_stock_gpt_5min")
-    mean, std = query_model(model, torch.randn(2, 77, len(StockGPT_cfg["input_features"])))
+    model, device = setup_model("model_parameters/checkpoint_stock_gpt_1min")
+    mean, std = query_model(model, torch.randn(2, 389, len(StockGPT_cfg["input_features"])))
     print(mean, std)
     print(mean.shape)

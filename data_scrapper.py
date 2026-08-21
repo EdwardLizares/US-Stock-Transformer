@@ -167,8 +167,9 @@ def data_scrapper(api_key:str, output_folder: str, batch_size,
 from pathlib import Path
 
 if __name__ == "__main__":
-    #print(pd.read_parquet("raw_data\data_1min_2025.parquet/batch_000.parquet"))
-    folder = Path("raw_data/data_1min_2025")
+    print(pd.read_parquet("raw_data/data_1min_2025/batch_000.parquet"))
+
+    folder = Path("raw_data/data_5min_2025")
     for path in folder.glob("*.parquet"):
         print(f"Fixing {path.name}...")
         df = pd.read_parquet(path)

@@ -63,7 +63,7 @@ BATCH_SIZE = 256
 NUM_WORKERS = 2
 PERSISTENT_WORKERS = True
 INPUT_FEATURES = ["bar", "vw", "ema9", "ema20", "macd", "o", "h", "l", "c",
-                  "n", "rv", "f", "fb"]
+                  "n", "rv", "f"]
 TARGET_FEATURES = ["o", "h", "l", "c"]
 FILE_LIMIT = 10
 
@@ -72,7 +72,7 @@ SEQ_LEN = BAR_PER_DAY - 1
 STEP = 1
 OUTPUT_DIM = 256
 
-PATH_RESULTS = "results"
+PATH_RESULTS = "results/losses"
 
 StockGPT_cfg = {
     "name": f"StockGPT-B{PRESETS[ID]['bar_width']}",
@@ -106,4 +106,13 @@ NaiveModel_cfg = {
     "name": f"NaiveModel-B{PRESETS[ID]['bar_width']}",
     "input_features": INPUT_FEATURES,
     "target_features": TARGET_FEATURES,
+    "file_limit": FILE_LIMIT
 }
+
+# Live Data Scrapper -----------------------------------------------------------------------------------------
+
+path_live_predata = ""
+
+# App State -----------------------------------------------------------------------------------------
+
+path_app_state = ""

@@ -52,10 +52,38 @@ def test_model(test_dl, model, device, eval_bs, pbar=None):
         test_metrics = eval_loss(test_dl, model, device, eval_bs, pbar, desc="Evaluating model on testing data...")
     return (test_metrics,)
 
+def process_metrics(metrics):
+    return {
+        key: value.detach().cpu().tolist()
+        for key, value in metrics.items()
+    }
+
+def process_result(model, train_val, test_loss, epoch):
+
+    """
+    Converts model evaluation results into a dictionary suitable for storage.
+    """
+    return {
+        "model": model.cfg["name"],
+        "bar_width": int(model.cfg["name"].split("-")[1][1:]),
+        "train": process_metrics(train_val[0]),
+        "val": process_metrics(train_val[1]),
+        "test": process_metrics(test_loss[0]),
+        "epoch": epoch,
+        "file_limit": model.cfg["file_limit"],
+    }
+
+
 def store_result(output_path, new_data):
-    os.makedirs("results", exist_ok=True)
-    df = pd.read_parquet(output_path) if Path(output_path).exists() else pd.DataFrame(
-        columns = [
+
+    """
+    Adds one processed model result to a parquet file.
+    """
+    os.makedirs(Path(output_path).parent, exist_ok=True)
+    if Path(output_path).exists():
+        df = pd.read_parquet(output_path)
+    else:
+        df = pd.DataFrame(columns=[
             "model",
             "bar_width",
             "train",
@@ -63,32 +91,13 @@ def store_result(output_path, new_data):
             "test",
             "epoch",
             "file_limit"
-        ]
-    )
-    confirm = ""
-    while confirm not in ('y', 'n'):
-        print(new_data)
-        confirm = input("Enter this data? (y/n)")
-        if confirm == 'y':
-            confirm = input("Are you sure? (y/n)")
-            if confirm == 'y':
-                df.loc[len(df)] = new_data
-            else:
-                break
-        else:
-            break
-    df.to_parquet(output_path)
-
-def process_result(model, train_val, test_loss, epoch, file_limit):
-    """
-    Outputs a list of dictionaries
-    """
-    return {
-        "model": model.cfg["name"],
-        "bar_width": model.cfg["name"].split('-')[1][1:],
-        "train": train_val[0],
-        "val": train_val[1],
-        "test": test_loss,
-        "epoch": epoch,
-        "file_limit": file_limit,
-    }
+        ])
+    print(new_data)
+    confirm = input("Enter this data? (y/n): ")
+    if confirm != "y":
+        return
+    confirm = input("Are you sure? (y/n): ")
+    if confirm != "y":
+        return
+    df.loc[len(df)] = new_data
+    df.to_parquet(output_path, index=False)

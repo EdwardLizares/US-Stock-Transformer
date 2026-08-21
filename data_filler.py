@@ -33,7 +33,7 @@ def fill_data(input_folder, output_folder, date_range, split=[0.75, 0.9]):
     os.makedirs(output_folder, exist_ok=True)
     files = list(Path(input_folder).glob("*.parquet"))
     timestamps_df = pd.DataFrame({"t": get_unix_timestamps(date_range, BAR_WIDTH)})
-    pbar = tqdm(files, total=len(files)*7, desc=f"Setting up...".ljust(80),
+    pbar = tqdm(files, total=len(files), desc=f"Setting up...".ljust(80),
                 bar_format="|{bar}| {percentage:3.1f}% ({elapsed}) {desc}")
     for file_path in files:
         con.execute(f"""
@@ -57,8 +57,7 @@ def fill_data(input_folder, output_folder, date_range, split=[0.75, 0.9]):
                 CASE
                     WHEN c IS NULL THEN 1
                     ELSE 0
-                END AS f,
-                0 AS fb
+                END AS f
             FROM (
                 SELECT
                     tickers.Tk,
@@ -86,7 +85,7 @@ def fill_data(input_folder, output_folder, date_range, split=[0.75, 0.9]):
             SELECT
                 *,
                 LAST_VALUE(c IGNORE NULLS) OVER (
-                    PARTITION BY Tk, date
+                    PARTITION BY Tk
                     ORDER BY t
                     ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
                 ) as c_ff
@@ -113,45 +112,12 @@ def fill_data(input_folder, output_folder, date_range, split=[0.75, 0.9]):
             FROM forward_fill_step1
         """)
 
-        #* Assigns c_bf to all backfill days
-        back_fill_step1 = con.sql("""
-            SELECT
-                *,
-                FIRST_VALUE(c IGNORE NULLS) OVER (
-                    PARTITION BY Tk, date
-                    ORDER BY t
-                    ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING
-                ) AS c_bf
-            FROM forward_fill_step2
-        """)
-
-        #* Fills ohlc & vw to c_bf for bf days
-        back_fill_step2 = con.sql("""
-            SELECT
-                * REPLACE (
-                    CASE
-                        WHEN f = 1
-                            AND c_ff IS NULL
-                            AND c_bf IS NOT NULL
-                        THEN 1
-                        ELSE 0
-                    END AS fb,
-
-                    COALESCE(o, c_bf) AS o,
-                    COALESCE(h, c_bf) AS h,
-                    COALESCE(l, c_bf) AS l,
-                    COALESCE(c, c_bf) AS c,
-                    COALESCE(vw, c_bf) AS vw
-                )
-            FROM back_fill_step1
-            ORDER BY TK, t
-        """)
-
         pbar.set_description(f"Saving file for {str(file_path.stem)}...")
         con.execute(f"""
             COPY (
-                SELECT * EXCLUDE (c_ff, c_bf)
-                FROM back_fill_step2
+                SELECT * EXCLUDE (c_ff)
+                FROM forward_fill_step2
+                WHERE c IS NOT NULL
             )
             TO '{output_folder}/{file_path.stem}.parquet'
             (FORMAT PARQUET)
@@ -161,9 +127,9 @@ def fill_data(input_folder, output_folder, date_range, split=[0.75, 0.9]):
 def debug(source_path, condition = "True"):
     db = duckdb.sql(f"""
         SELECT *
-        FROM read_parquet('{source_path}/batch_000.parquet')
+        FROM read_parquet('{source_path}/batch_005.parquet')
         WHERE {condition}
-        ORDER BY t
+        ORDER BY Tk, t
     """)
     return db
 
@@ -171,5 +137,4 @@ if __name__ == "__main__":
     with open("raw_data/all_tickers_trimmed_1_30", "r") as f:
         tickers = json.load(f)
     fill_data(path_data_scrapper, path_data_filler, DATE_RANGE)
-    print(debug(path_data_filler, "Tk = 'TENX' AND f = 0"))
-    print(debug('raw_data/data_1min_2025'))
+    print(debug('filled_raw_data/data_5min_2025', "Tk = 'TENX'"))
