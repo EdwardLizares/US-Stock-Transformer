@@ -110,7 +110,7 @@ def filter_ticker_list_by_price_range(path: str, date_range: pd.DatetimeIndex,
         json.dump(trimmed_tickers, f)
         return trimmed_tickers
 
-def data_scrapper(api_key:str, output_folder: str, batch_size,
+def scrape_data(api_key:str, output_folder: str, batch_size,
                   ticker_list: list, date_range: pd.DatetimeIndex, time_frame: str) -> pd.DataFrame:
 
     os.makedirs(output_folder, exist_ok=True)
@@ -188,7 +188,7 @@ if __name__ == "__main__":
                                                             MN,
                                                             MX)
     print(len(all_tickers_trimmed))
-    data_scrapper(
+    scrape_data(
         api_key=API_KEY,
         output_folder=path_data_scrapper,
         ticker_list=all_tickers_trimmed,

@@ -20,6 +20,10 @@ class StockDataset(Dataset):
 
         self.input_features = input_features
         self.target_features = target_features
+        self.target_indices = [
+            self.input_features.index(feature)
+            for feature in self.target_features
+        ]
 
         self.seq_len = seq_len
         self.step = step
@@ -82,6 +86,7 @@ class StockDataset(Dataset):
         y = np.column_stack([
             y_table[col].to_numpy() for col in self.target_features
         ]).astype(np.float32, copy=False)
+        y = y - x[:, self.target_indices]
 
         return torch.from_numpy(x), torch.from_numpy(y)
 

@@ -2,15 +2,24 @@ import os
 import torch
 
 from tqdm import tqdm
+from setup import DGF
 
-def batch_loss(x, y, model):
+def get_dist(mean, std, dgf = DGF):
+    if dgf is None:
+        dist = torch.distributions.Normal(mean, std)
+    else:
+        dist = torch.distributions.StudentT(dgf=dgf, loc=mean, scale=std)
+    return dist
+
+def batch_loss(x, y, model, df = None):
     """
     Assume x and y are on the correct device already \n
     Returns NLL for back propagation
     """
     mean, std = model(x)
+    dist = get_dist(mean, std)
     y_norm = (y - model.target_mean) / model.target_std
-    dist = torch.distributions.Normal(mean, std)
+
     return -dist.log_prob(y_norm).mean()
 
 def eval_loss(data_loader, model, device, max_batches = float("inf"), pbar = None, desc="") -> dict: 
@@ -47,7 +56,7 @@ def eval_loss(data_loader, model, device, max_batches = float("inf"), pbar = Non
             ).mean(dim=(0, 1))
 
             #* NLL per target column
-            dist = torch.distributions.Normal(mean, std)
+            dist = get_dist(mean, std)
             nll = -dist.log_prob(t_norm).mean(dim=(0, 1))
 
             #* Predicted STD per target column

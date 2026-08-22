@@ -8,7 +8,7 @@ RV_THRESH = 5
 MN = 1                                                                  # Pre-culls tickers for price
 MX = 30     
 
-ID = 5
+ID = 1
 PRESETS = {
     1: {
         "file_name": "data_1min_2025",
@@ -65,19 +65,21 @@ PERSISTENT_WORKERS = True
 INPUT_FEATURES = ["bar", "vw", "ema9", "ema20", "macd", "o", "h", "l", "c",
                   "n", "rv", "f"]
 TARGET_FEATURES = ["o", "h", "l", "c"]
-FILE_LIMIT = 10
+FILE_LIMIT = 7
 
 # Stock GPT -----------------------------------------------------------------------------------------
 SEQ_LEN = BAR_PER_DAY - 1
 STEP = 1
 OUTPUT_DIM = 256
+DGF = None
 
-PATH_RESULTS = "results/losses"
+PATH_RESULTS_NON_RESIDUALS = "results/losses/non_residuals"
+PATH_RESULTS_RESIDUALS = "results/losses/residuals"
 
 StockGPT_cfg = {
     "name": f"StockGPT-B{PRESETS[ID]['bar_width']}",
-    "checkpoint_path": f"model_parameters/checkpoint_stock_gpt_{ID}min",
-    "best_path": f"model_parameters/best_stock_gpt_{ID}min",
+    "checkpoint_path": f"model_parameters/checkpoint_stock_gpt_{ID}min_residuals",
+    "best_path": f"model_parameters/best_stock_gpt_{ID}min_residuals",
     "input_features": INPUT_FEATURES,
     "target_features": TARGET_FEATURES,
     "bar_per_day": BAR_PER_DAY,
@@ -92,8 +94,8 @@ StockGPT_cfg = {
 
 LinearModel_cfg = {
     "name": f"LinearModel-B{PRESETS[ID]['bar_width']}",
-    "checkpoint_path": f"model_parameters/checkpoint_linear_model_{ID}min",
-    "best_path": f"model_parameters/best_linear_model_{ID}min",
+    "checkpoint_path": f"model_parameters/checkpoint_linear_model_{ID}min_residuals",
+    "best_path": f"model_parameters/best_linear_model_{ID}min_residuals",
     "input_features": INPUT_FEATURES,
     "target_features": TARGET_FEATURES,
     "seq_len": SEQ_LEN,

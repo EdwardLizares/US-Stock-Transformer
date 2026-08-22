@@ -20,7 +20,7 @@ def get_unix_timestamps(date_range: pd.DatetimeIndex, bar_width: int):
                     ).strftime("%H:%M")
         ], format="%Y-%m-%d %H:%M").tz_localize("America/New_York").as_unit("ms").astype("int64")
 
-def fill_data(input_folder, output_folder, date_range, split=[0.75, 0.9]):
+def fill_data(input_folder, output_folder, date_range):
     """
     Corrects for missing intraday data
     """

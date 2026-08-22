@@ -76,7 +76,7 @@ def filter_data(df: pd.DataFrame, pbar = None) -> pd.DataFrame:
 
     return df
 
-def preprocess_data(source_folder: str, output_folder: str, date_range, split):
+def preprocess_data(source_folder: str, output_folder: str, date_range, split = [0.75, 0.9]):
     """
     Takes a folder with raw parquet files and splits each folder by date into train-val-test folders
     """
