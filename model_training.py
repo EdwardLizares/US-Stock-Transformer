@@ -161,6 +161,7 @@ def train_model_cuda(model, device, optimizer, cuda_scaler, scheduler, max_epoch
             #* SAVES MODEL
             checkpoint = {
                 "model": model.state_dict(),
+                "cfg": model.cfg,
                 "optimizer": optimizer.state_dict(),
                 "cuda_scaler": cuda_scaler.state_dict(),
                 "scheduler": scheduler.state_dict(),

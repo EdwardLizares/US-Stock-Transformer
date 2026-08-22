@@ -109,10 +109,7 @@ NaiveModel_cfg = {
     "file_limit": FILE_LIMIT
 }
 
-# Live Data Scrapper -----------------------------------------------------------------------------------------
+# Model Query -----------------------------------------------------------------------------------------
 
-path_live_predata = ""
-
-# App State -----------------------------------------------------------------------------------------
-
-path_app_state = ""
+path_stockGPT_B1 = "model_parameters/best_stock_gpt_1min"
+path_stockGPT_B5 = "model_parameters/best_stock_gpt_5min"

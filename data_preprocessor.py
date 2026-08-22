@@ -11,8 +11,9 @@ from setup import path_data_filler, path_data_preprocessor
 class ProcessingError(Exception):
     pass
 
-def calculate_additional_hyperparameters(df: pd.DataFrame, pbar) -> pd.DataFrame:
-    pbar.set_description("Doing some feature engineering...".ljust(80))
+def calculate_additional_hyperparameters(df: pd.DataFrame, pbar = None) -> pd.DataFrame:
+    if pbar is not None:
+        pbar.set_description("Doing some feature engineering...".ljust(80))
     df = df.sort_values(["Tk", "t"])
     df["av"] = (
         df.groupby("Tk")["v"].transform(
@@ -53,16 +54,17 @@ def calculate_additional_hyperparameters(df: pd.DataFrame, pbar) -> pd.DataFrame
 
     return df
 
-def engineer_data(df: pd.DataFrame, pbar) -> pd.DataFrame:
+def engineer_data(df: pd.DataFrame, pbar = None) -> pd.DataFrame:
     df = calculate_additional_hyperparameters(df, pbar)
     return df
 
-def filter_data(df: pd.DataFrame, pbar) -> pd.DataFrame:
+def filter_data(df: pd.DataFrame, pbar = None) -> pd.DataFrame:
     """
     Filters for RV and Price
     Additionally removes days with any NaN rv
     """
-    pbar.set_description("Filtering data...".ljust(80))
+    if pbar is not None:
+        pbar.set_description("Filtering data...".ljust(80))
     rv_mask = (df.groupby(["Tk", "date"])["rv"].transform("max")>RV_THRESH)
     df = df[rv_mask]
     pc_mask = ((df.groupby(["Tk", "date"])["l"].transform("min")<=MX) &
