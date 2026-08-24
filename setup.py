@@ -1,5 +1,6 @@
 import pandas_market_calendars as mcal
 
+DEBUG = False
 API_KEY = "sdpbiDy3nfhuvQX2SBBtL6Gt2dl88ZrU"
 DATE_RANGE = mcal.get_calendar("NYSE").schedule("2025-01-01","2025-12-31").index
 
@@ -113,5 +114,7 @@ NaiveModel_cfg = {
 
 # Model Query -----------------------------------------------------------------------------------------
 
-path_stockGPT_B1 = "model_parameters/best_stock_gpt_1min"
-path_stockGPT_B5 = "model_parameters/best_stock_gpt_5min"
+#path_stockGPT_B1 = "model_parameters/best_stock_gpt_1min"
+#path_stockGPT_B5 = "model_parameters/best_stock_gpt_5min"
+path_stockGPT_B1r = "model_parameters/best_stock_gpt_1min_residuals"
+path_stockGPT_B5r = "model_parameters/best_stock_gpt_5min_residuals"

@@ -2,9 +2,8 @@ import torch
 
 from pathlib import Path
 
-from setup import StockGPT_cfg, path_stockGPT_B1, path_stockGPT_B5
+from setup import StockGPT_cfg
 from stock_gpt import StockGPT
-from dataloader_builder import calculate_training_norms
 
 def setup_model(source_model: Path):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -33,18 +32,22 @@ def query_model(model, x):
     seq_len = x.shape[1]
     return x[:, -1, :], mean[:,seq_len-1,:], std[:,seq_len-1,:]
 
-def print_prediction(prev, mean, std, input_features, target_features):
+def print_prediction(prev, res, std, input_features, target_features):
 
+    if prev is None or res is None or std is None:
+        print("No prediction available.")
+        return
+    
     prev = prev.detach().cpu().squeeze()
-    mean = mean.detach().cpu().squeeze()
+    res = res.detach().cpu().squeeze()
     std = std.detach().cpu().squeeze()
 
     target_indices = [input_features.index(feature) for feature in target_features]
 
     prev = prev[target_indices]
-    print(f"{'Feature':<10} {'Previous':>10} {'Mean':>10} {'Std':>10}")
+    print(f"{'Feature':<10} {'Previous':>10} {'Residual':>10} {'Std':>10}")
     print("-" * 44)
-    for feature, p, m, s in zip(target_features, prev, mean, std):
+    for feature, p, m, s in zip(target_features, prev, res, std):
         print(
             f"{feature:<10}"
             f"{p.item():>10.4f}"
@@ -52,7 +55,7 @@ def print_prediction(prev, mean, std, input_features, target_features):
             f"{s.item():>10.4f}"
         )
 if __name__ == "__main__":
-    model, device = setup_model("model_parameters/checkpoint_stock_gpt_1min")
-    mean, std = query_model(model, torch.randn(2, 389, len(StockGPT_cfg["input_features"])))
+    model, device = setup_model("model_parameters/checkpoint_stock_gpt_1min_residuals")
+    prev, mean, std = query_model(model, torch.randn(2, 389, len(StockGPT_cfg["input_features"])))
     print(mean, std)
     print(mean.shape)
