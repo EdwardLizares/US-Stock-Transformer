@@ -66,17 +66,14 @@ PERSISTENT_WORKERS = True
 INPUT_FEATURES = ["bar", "vw", "ema9", "ema20", "macd", "o", "h", "l", "c",
                   "n", "rv", "f"]
 TARGET_FEATURES = ["o", "h", "l", "c"]
-FILE_LIMIT = 30
-FILE_START = 10
+FILE_LIMIT = 15
+FILE_START = 0
 
 # Stock GPT -----------------------------------------------------------------------------------------
 SEQ_LEN = BAR_PER_DAY - 1
 STEP = 1
 OUTPUT_DIM = 256
-DGF = None
-
-PATH_RESULTS_NON_RESIDUALS = "results/losses/non_residuals"
-PATH_RESULTS_RESIDUALS = "results/losses/residuals"
+DGF = None                          #* Degrees of Freedom for Student-t
 
 StockGPT_cfg = {
     "name": f"StockGPT-B{PRESETS[ID]['bar_width']}",

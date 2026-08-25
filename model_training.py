@@ -8,29 +8,29 @@ def get_dist(mean, std, dgf = DGF):
     if dgf is None:
         dist = torch.distributions.Normal(mean, std)
     else:
-        dist = torch.distributions.StudentT(dgf=dgf, loc=mean, scale=std)
+        dist = torch.distributions.StudentT(dgf, mean, std)
     return dist
 
-def batch_loss(x, y, model, df = None):
+def batch_loss(x, y, model, dgf = DGF):
     """
     Assume x and y are on the correct device already \n
     Returns NLL for back propagation
     """
     mean, std = model(x)
-    dist = get_dist(mean, std)
+    dist = get_dist(mean, std, dgf)
     y_norm = (y - model.target_mean) / model.target_std
 
     return -dist.log_prob(y_norm).mean()
 
 def eval_loss(data_loader, model, device, max_batches = float("inf"), pbar = None, desc="") -> dict: 
     """
-    Returns a dict of MAE loss and Negative Log Loss 
+    Returns a dict of MAE loss and Negative Log Loss
     """
     num_batches = min(len(data_loader), max_batches)
     avg_mae = 0
-    avg_pmae = 0
     avg_nll = 0
     avg_std = 0
+    avg_z2 = 0
 
     for i, (p, t) in enumerate(data_loader):
         if i == num_batches:
@@ -47,14 +47,6 @@ def eval_loss(data_loader, model, device, max_batches = float("inf"), pbar = Non
             #* MAE per target column
             mae = torch.abs(mean - t_norm).mean(dim=(0, 1))
 
-            #* PMAE per target column
-            t_real = mean * model.target_std + model.target_mean
-            pmae = (
-                torch.abs(t_real - t)
-                / torch.abs(t).clamp_min(1e-8)
-                * 100
-            ).mean(dim=(0, 1))
-
             #* NLL per target column
             dist = get_dist(mean, std)
             nll = -dist.log_prob(t_norm).mean(dim=(0, 1))
@@ -62,16 +54,20 @@ def eval_loss(data_loader, model, device, max_batches = float("inf"), pbar = Non
             #* Predicted STD per target column
             col_std = std.mean(dim=(0, 1))
 
+            #* Z statistics
+            z = (t_norm - mean) / std.clamp_min(1e-6)
+            z2 = z.pow(2).mean(dim=(0, 1))
+
         avg_mae += (mae - avg_mae) / (i+1)
-        avg_pmae += (pmae - avg_pmae) / (i+1)
         avg_nll += (nll - avg_nll) / (i+1)
         avg_std += (col_std - avg_std) / (i+1)
+        avg_z2 += (z2 - avg_z2) / (i+1)
 
         if pbar is not None:
             pbar.update(1)
             if i % max(1,int(num_batches*0.001))==0:
                 pbar.set_description(f"{desc} ({i}/{num_batches}) [{pbar.n}/{pbar.total}]")
-    return {"NLL": avg_nll, "STD": avg_std, "MAE": avg_mae, "PMAE": avg_pmae}
+    return {"NLL": avg_nll, "STD": avg_std, "MAE": avg_mae, "Z^2": avg_z2}
 
 def load_model(path, model, device, optimizer=None, cuda_scaler=None, scheduler=None):
     checkpoint = torch.load(path, map_location=device)
