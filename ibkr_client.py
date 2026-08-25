@@ -21,7 +21,7 @@ class IBKRClient(EClient, EWrapper):
         self.thread = threading.Thread(target=self.run,)
         self.thread.start()
         time.sleep(1)
-        self.reqMarketDataType(3) #* 3: Delayed, 1: Live
+        self.reqMarketDataType(1) #* 3: Delayed, 1: Live
         if DEBUG:
             print("Client initialized")
 
@@ -72,6 +72,15 @@ class IBKRClient(EClient, EWrapper):
         if DEBUG:
             print(f"Requested historical data for base_id:{req_id}")
 
+    def request_test_data(self, req_id, contract, end):
+        end_str = end.strftime("%Y%m%d %H:%M:%S US/Eastern")
+        self.reqHistoricalData(
+            req_id, contract, end_str, "2 D", "1 min", "TRADES", 1, 2, False, []
+        )
+        self.reqHistoricalData(
+            req_id+1, contract, end_str, "3 D", "5 mins", "TRADES", 1, 2, False, []
+        )
+
     def unsubscribe(self, ticker):
         req_id = self.ticker_ids[ticker]
         self.cancelHistoricalData(req_id)
@@ -99,7 +108,7 @@ class IBKRClient(EClient, EWrapper):
     def del_id_tickers(self, req_id):
         del self._id_tickers[req_id//2]
 
-    def add_ticker(self, ticker):
+    def add_ticker(self, ticker, end = None):
         if ticker not in self.tickers:
             contract = self.contract(ticker)
             req_id = self.nextId()
@@ -108,9 +117,11 @@ class IBKRClient(EClient, EWrapper):
             self.ticker_ids[ticker] = req_id            #* Base id
             self.set_id_ticker(req_id, ticker)
             self.ticker_contracts[ticker] = contract
-            if DEBUG:
-                print(f"Requesting historical data for {ticker}")
-            self.request_historical_data(req_id, contract)
+            if end is None:
+                self.request_historical_data(req_id, contract)
+            else:
+                self.request_test_data(req_id, contract, end)
+
 
     def remove_ticker(self, ticker):
         if ticker in self.tickers:

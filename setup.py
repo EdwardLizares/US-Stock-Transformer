@@ -9,7 +9,7 @@ RV_THRESH = 5
 MN = 1                                                                  # Pre-culls tickers for price
 MX = 30     
 
-ID = 1
+ID = 5
 PRESETS = {
     1: {
         "file_name": "data_1min_2025",
@@ -66,7 +66,8 @@ PERSISTENT_WORKERS = True
 INPUT_FEATURES = ["bar", "vw", "ema9", "ema20", "macd", "o", "h", "l", "c",
                   "n", "rv", "f"]
 TARGET_FEATURES = ["o", "h", "l", "c"]
-FILE_LIMIT = 7
+FILE_LIMIT = 30
+FILE_START = 10
 
 # Stock GPT -----------------------------------------------------------------------------------------
 SEQ_LEN = BAR_PER_DAY - 1

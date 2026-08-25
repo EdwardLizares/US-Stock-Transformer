@@ -1,13 +1,11 @@
 import unittest
 import pandas as pd
 
-from archived_scripts.data_filler import process_data
+from app import App
 
-class TestDataProcessor1(unittest.TestCase):
+class TestApp(unittest.TestCase):
     def test_process_data(self):
-        # Test that the process_data function returns a DataFrame
-        df = process_data("test_data/case_1.parquet")
-        self.assertIsInstance(df, pd.DataFrame)
+        app = App()
 
 if __name__ == "__main__":
     unittest.main()

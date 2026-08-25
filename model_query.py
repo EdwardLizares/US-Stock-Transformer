@@ -19,7 +19,7 @@ def setup_model(source_model: Path):
 def query_model(model, x):
     """
     Expects (bs, sql, 13)
-    Returns the predicted next column per ticker in batch
+    Returns all predicted next column per ticker in batch
     """
     device = next(model.parameters()).device
     x = x.to(device)
@@ -30,7 +30,8 @@ def query_model(model, x):
         std = std * model.target_std
 
     seq_len = x.shape[1]
-    return x[:, -1, :], mean[:,seq_len-1,:], std[:,seq_len-1,:]
+
+    return x, mean, std
 
 def print_prediction(prev, res, std, input_features, target_features):
 

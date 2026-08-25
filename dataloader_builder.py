@@ -5,11 +5,11 @@ import pyarrow as pa
 from torch.utils.data import DataLoader
 from pathlib import Path
 
-from setup import INPUT_FEATURES, TARGET_FEATURES, BATCH_SIZE, NUM_WORKERS, PERSISTENT_WORKERS, FILE_LIMIT
+from setup import INPUT_FEATURES, TARGET_FEATURES, BATCH_SIZE, NUM_WORKERS, PERSISTENT_WORKERS, FILE_LIMIT, FILE_START
 from setup import path_data_preprocessor
 from stock_dataset import StockDataset
 
-def calculate_training_norms(source_folder, input_features, target_features, file_limit = FILE_LIMIT):
+def calculate_training_norms(source_folder, input_features, target_features, file_limit = FILE_LIMIT, file_start = FILE_START):
     """
     Expects source folder to be all train arrow files and returns all calculated norms
     """
@@ -22,7 +22,7 @@ def calculate_training_norms(source_folder, input_features, target_features, fil
 
     files = sorted(Path(source_folder).glob("*.arrow"))
     if file_limit is not None:
-        files = files[:file_limit]
+        files = files[file_start:file_start+file_limit]
 
     for file_path in files:
         with pa.memory_map(str(file_path), "r") as source:

@@ -1,13 +1,16 @@
 import torch
+import time as t
 import pandas as pd
 
 from collections import deque
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 from data_filler import get_unix_timestamps
 from model_query import setup_model, query_model, print_prediction
 from ibkr_client import IBKRClient
+from dataloader_builder import build_dataloaders
+
 from setup import API_KEY, BAR_WIDTH, INPUT_FEATURES, TARGET_FEATURES, DEBUG
 from setup import path_stockGPT_B1r, path_stockGPT_B5r
 from setup import StockGPT_cfg
@@ -36,11 +39,34 @@ class App():
         #* DATA ------------------------------
         self.data = AppData(self)
 
+        #* TESTMODE --------------------------- 
+        self.test_mode = False
+        self.end = None
+
     def get_apikey(self):
         return self.api_key
     
     def get_date(self):
         return self.date
+
+    def set_date(self, date):
+        self.date = date
+        self.market_open_s = int(datetime.combine(self.date, time(9, 30),
+                                            tzinfo=self.tz).timestamp())
+        self.market_close_s = int(datetime.combine(self.date, time(16, 0),
+                                          tzinfo=self.tz).timestamp())
+        
+    def enable_test_mode(self, date):
+        self.test_mode = True
+        self.set_date(date)
+        self.end = datetime.combine(
+            date, time(16, 0), tzinfo=ZoneInfo("America/New_York")
+        )
+
+    def disable_test_mode(self):
+        self.test_mode = False
+        self.date = datetime.today()
+        self.end = None
 
     def get_inputfeatures(self):
         return self.input_features
@@ -51,7 +77,7 @@ class App():
     def select_ticker(self, ticker: str):
         if DEBUG:
             print(f"Selecting {ticker}")
-        self.client.add_ticker(ticker)
+        self.client.add_ticker(ticker, self.end)
 
     def unselect_ticker(self, ticker: str):
         base_id = self.client.remove_ticker(ticker)
@@ -61,14 +87,16 @@ class App():
     def show_selected_tickers(self):
         print(self.client.tickers)
 
-    def query_model(self, df, bar_width: int):
+    def query_model(self, df, bar_width: int, return_all = False):
         model = self.stockGPT_B1 if bar_width == 1 else self.stockGPT_B5
         tensor = torch.tensor(
             df[self.input_features].to_numpy(),
             dtype=torch.float32
         ).unsqueeze(0)
         prev, residual, std = query_model(model, tensor)
-        return prev, residual, std
+        if return_all:
+            return prev, residual, std
+        return prev[:, -1, :], residual[:, -1, :], std[:, -1, :]
 
     def get_predictions(self, ticker):
         base_id = self.client.ticker_ids[ticker]
@@ -84,33 +112,100 @@ class App():
         else:
             self.print_predictions(self.get_predictions(ticker))
 
+    def test_model_predictions(self, df, bar_width):
+        _, predicted_residuals, predicted_std = self.query_model(df[:-1], bar_width, True)
+        predicted_residuals = predicted_residuals.squeeze(0)
+        predicted_std = predicted_std.squeeze(0)
+
+        observed_targets = df[TARGET_FEATURES].to_numpy()
+        observed_residuals = (observed_targets[1:] - observed_targets[:-1])
+        observed_tensor = torch.from_numpy(observed_residuals).to(
+            dtype=predicted_residuals.dtype,
+            device=predicted_residuals.device
+        )
+
+        error = predicted_residuals - observed_tensor
+        abs_error = error.abs()
+        mae = abs_error.mean(dim=0)
+
+        std_safe = predicted_std.clamp(min=1e-8)
+        avg_std = predicted_std.mean(dim=0)
+        z_error = error / std_safe
+        mean_abs_z = z_error.abs().mean(dim=0)
+
+        within_1std = (abs_error <= std_safe).float().mean(dim=0)
+        within_2std = (abs_error <= (2 * std_safe)).float().mean(dim=0)
+
+        nll = gnll(predicted_residuals,
+                observed_tensor,
+                std_safe ** 2,
+                full=True,
+                reduction="none")
+        mean_nll = nll.mean(dim=0)
+
+        print("\n")
+        print(f"{'Feature':<10}"
+            f"{'MAE':>12}"
+            f"{'Avg STD':>12}"
+            f"{'|Z|':>10}"
+            f"{'±1σ':>10}"
+            f"{'±2σ':>10}"
+            f"{'NLL':>12}")
+        print("-" * 105)
+        for i, feature in enumerate(TARGET_FEATURES):
+            print(f"{feature:<10}"
+                f"{mae[i].item():>12.6f}"
+                f"{avg_std[i].item():>12.6f}"
+                f"{mean_abs_z[i].item():>10.3f}"
+                f"{within_1std[i].item() * 100:>9.1f}%"
+                f"{within_2std[i].item() * 100:>9.1f}%"
+                f"{mean_nll[i].item():>12.4f}")
+
     def execute(self):
         try:
             print("--- StockGPT App-V1 ------------")
             while True:
-                command = input(
-                    "\n"
-                    "1: Add ticker\n"
-                    "2: Remove ticker\n"
-                    "3: Show tickers\n"
-                    "4: Predict ticker\n"
-                    "q: Quit\n"
-                    "\n"
-                    "   >> "
-                )
-                if command == "1":
-                    ticker = input("\nTicker: ").upper()
-                    self.select_ticker(ticker)
-                elif command == "2":
-                    ticker = input("\nTicker: ").upper()
-                    self.unselect_ticker(ticker)
-                elif command == "3":
-                    self.show_selected_tickers()
-                elif command == "4":
-                    ticker = input("\nTicker: ").upper()
-                    self.predict_ticker(ticker)
-                elif command.lower() == "q":
-                    break
+                if app.test_mode is False:
+                    command = input("\n"
+                                    "1: Add ticker        2: Remove ticker      3: Show tickers\n"
+                                    "4: Predict ticker    5: Enable TestMode    q: Quit\n"
+                                    "\n"
+                                    "   >> ")
+                    if command == "1":
+                        ticker = input("\nTicker: ").upper()
+                        self.select_ticker(ticker)
+                    elif command == "2":
+                        ticker = input("\nTicker: ").upper()
+                        self.unselect_ticker(ticker)
+                    elif command == "3":
+                        self.show_selected_tickers()
+                    elif command == "4":
+                        ticker = input("\nTicker: ").upper()
+                        self.predict_ticker(ticker)
+                    elif command == "5":
+                        date_offset = int(input("Date Offset: "))
+                        app.enable_test_mode(app.get_date() - timedelta(date_offset))
+                    elif command.lower() == "q":
+                        break
+                else:
+                    print("\n!!! TestMode Enabled !!!")
+
+                    command = input("\n"
+                                    "1: Test Ticker       "
+                                    "2: Exit TestMode     "
+                                    "q: Quit\n"
+                                    "\n"
+                                    "   >> ")
+                    if command == "1":
+                        ticker = input("Ticker: ")
+                        self.select_ticker(ticker)
+                        t.sleep(2)
+                        
+                        self.test_model_predictions(self.data.id_rth_processed_bars[0], 1)
+                        self.test_model_predictions(self.data.id_rth_processed_bars[1], 5)
+                        break
+                    if command == "2":
+                        self.disable_test_mode()
         finally:
             self.client.close()
     
@@ -344,7 +439,9 @@ class DataProcessor():
     def process_data(data: list, bar_width):
         df = DataProcessor.fill_history(data, bar_width)
         return DataProcessor.process_history(df)
-          
+
+from torch.nn.functional import gaussian_nll_loss as gnll 
+
 if __name__ == "__main__":
     app = App()
     app.execute()
