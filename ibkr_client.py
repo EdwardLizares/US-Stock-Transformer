@@ -22,12 +22,12 @@ class IBKRClient(EClient, EWrapper):
         self.thread.start()
         time.sleep(1)
         self.reqMarketDataType(1) #* 3: Delayed, 1: Live
-        if DEBUG:
+        if DEBUG or False:
             print("Client initialized")
 
     def error(self, reqId: TickerId, errorTime: int, errorCode: int,
               errorString: str, advancedOrderRejectJson = ""):
-        if DEBUG:
+        if DEBUG or False:
             print("Error. Id:", reqId, errorTime, "Code:", errorCode, "Msg:", errorString,
                   "AdvancedOrderRejectJson:", advancedOrderRejectJson)
  
@@ -57,6 +57,8 @@ class IBKRClient(EClient, EWrapper):
 
     def historicalDataUpdate(self, req_id, bar):
         # latest bar being updated live
+        if DEBUG:
+            print("historicalDataUpdate callback received")
         self.app.data.update_id_data(req_id, bar)
 
     def request_historical_data(self, req_id, contract):
@@ -69,7 +71,7 @@ class IBKRClient(EClient, EWrapper):
         self.reqHistoricalData(
             req_id+1, contract, "", "48600 S", "5 mins", "TRADES", 1, 2, True, []
         )
-        if DEBUG:
+        if DEBUG or False:
             print(f"Requested historical data for base_id:{req_id}")
 
     def request_test_data(self, req_id, contract, end):

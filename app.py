@@ -75,7 +75,7 @@ class App():
         return self.target_features
 
     def select_ticker(self, ticker: str):
-        if DEBUG:
+        if DEBUG or False:
             print(f"Selecting {ticker}")
         self.client.add_ticker(ticker, self.end)
 
@@ -223,7 +223,7 @@ class AppData():
             0: 1,
             1: 5
         }
-        if DEBUG:
+        if DEBUG or False:
             print("DataState initialized")
 
     def ibkrbar_to_mybar(self, bar):
@@ -283,7 +283,7 @@ class AppData():
             "volume_sum": sum(volumes),
         }
 
-        if DEBUG:
+        if DEBUG or False:
             print(f"Rolling: {self.id_rolling_features[req_id]}")
 
     def finish_id_initialization(self, req_id):
@@ -307,9 +307,21 @@ class AppData():
         self.id_rth_processed_bars[req_id] = processed_bars_df[
             (processed_bars_df["t"] >= self.app.market_open_s) &
             (processed_bars_df["t"] < self.app.market_close_s)
-        ].copy()
+        ].copy().reset_index(drop=True)
 
-        if DEBUG:
+        #* Create prediction immediately from completed historical bars
+        if len(self.id_rth_processed_bars[req_id]) > 0:
+            prev, res, std = self.app.query_model(
+                self.id_rth_processed_bars[req_id],
+                self.bar_width[req_id % 2]
+            )
+            self.id_pred_bars[req_id] = {
+                "prev": prev,
+                "res": res,
+                "std": std
+            }
+        
+        if DEBUG or False:
             print(f"eth: {len(eth)}")
             print(f"rth: {len(rth)}")
             print(self.id_rth_processed_bars[req_id])
@@ -380,6 +392,8 @@ class AppData():
                     "res": res,
                     "std": std
                 }
+            if DEBUG:
+                print("New prediction added")
         self.id_current_bar[req_id] = mybar
 
     def del_req_id_data(self, req_id):
@@ -410,7 +424,8 @@ class DataProcessor():
         expected_t = expected_t // 1000
         expected_t = expected_t - bar_width * 60
         now_s = int(now.timestamp())
-        expected_t = expected_t[(expected_t >= df["t"].iloc[0]) & (expected_t <= now_s)]
+        expected_t = expected_t[(expected_t >= df["t"].iloc[0]) &
+                                (expected_t <= df["t"].iloc[-1])]
         df = (df.set_index("t").reindex(expected_t).rename_axis("t").reset_index())
 
         df["date"] = (pd.to_datetime(df["t"], unit="s", utc=True

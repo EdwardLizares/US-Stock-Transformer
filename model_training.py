@@ -71,7 +71,8 @@ def eval_loss(data_loader, model, device, max_batches = float("inf"), pbar = Non
 
 def load_model(path, model, device, optimizer=None, cuda_scaler=None, scheduler=None):
     checkpoint = torch.load(path, map_location=device)
-    model.load_state_dict(checkpoint["model"])
+    missing, unexpected = model.load_state_dict(checkpoint["model"], strict=False)
+    print(missing, unexpected)
     if optimizer is not None and "optimizer" in checkpoint:
         optimizer.load_state_dict(checkpoint["optimizer"])
     if cuda_scaler is not None and "cuda_scaler" in checkpoint:
@@ -94,7 +95,7 @@ def evaluate_model(train_dl, val_dl, model, device, eval_bs, pbar = None):
 def evaluate_best_model(model, device, optimizer, cuda_scaler, scheduler, train_dl, val_dl,
                         eval_bs, pbar = None, reevaluate = False):
     if os.path.exists(model.best_path):
-        checkpoint = load_model(model.best_path, model, device, optimizer, cuda_scaler, scheduler)
+        checkpoint = load_model(model.best_path, model, device)
         if reevaluate is False:
             return checkpoint["train_losses"][-1], checkpoint["val_losses"][-1]
         else:

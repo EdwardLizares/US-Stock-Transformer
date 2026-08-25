@@ -1,6 +1,6 @@
 import pandas_market_calendars as mcal
 
-DEBUG = False
+DEBUG = True
 API_KEY = "sdpbiDy3nfhuvQX2SBBtL6Gt2dl88ZrU"
 DATE_RANGE = mcal.get_calendar("NYSE").schedule("2025-01-01","2025-12-31").index
 
@@ -9,7 +9,7 @@ RV_THRESH = 5
 MN = 1                                                                  # Pre-culls tickers for price
 MX = 30     
 
-ID = 5
+ID = 1
 PRESETS = {
     1: {
         "file_name": "data_1min_2025",

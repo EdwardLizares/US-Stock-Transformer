@@ -85,6 +85,7 @@ class StockGPT(torch.nn.Module):
         )
         self.final_norm = LayerNorm(cfg["output_dim"])
         self.out_head = torch.nn.Linear(cfg["output_dim"], 2*len(cfg["target_features"]), False)
+        #self.log_std_scale = torch.nn.Parameter(torch.zeros(len(cfg["target_features"])))
 
         if train_norms is None:
             train_norms = (
@@ -114,6 +115,7 @@ class StockGPT(torch.nn.Module):
         x = self.out_head(x)
         mean, raw_std = x.chunk(2, dim=-1)
         std = torch.nn.functional.softplus(raw_std) + 1e-6
+        std = std # * torch.exp(self.log_std_scale)
         return mean, std
 
 class LinearModel(torch.nn.Module):
