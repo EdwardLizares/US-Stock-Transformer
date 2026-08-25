@@ -144,5 +144,5 @@ def debug():
 
 if __name__ == "__main__":
     preprocess_data(path_data_filler, path_data_preprocessor, DATE_RANGE, SPLIT)
-    print(debug())
+    #print(debug())
     

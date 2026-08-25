@@ -9,7 +9,7 @@ RV_THRESH = 5
 MN = 1                                                                  # Pre-culls tickers for price
 MX = 30     
 
-ID = 1
+ID = 15
 PRESETS = {
     1: {
         "file_name": "data_1min_2025",

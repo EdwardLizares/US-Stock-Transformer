@@ -167,20 +167,7 @@ def scrape_data(api_key:str, output_folder: str, batch_size,
 from pathlib import Path
 
 if __name__ == "__main__":
-    print(pd.read_parquet("raw_data/data_1min_2025/batch_000.parquet"))
-
-    folder = Path("raw_data/data_5min_2025")
-    for path in folder.glob("*.parquet"):
-        print(f"Fixing {path.name}...")
-        df = pd.read_parquet(path)
-        # Remove columns we don't need
-        df = df.drop(columns=["otc"], errors="ignore")
-        # Keep exact schema
-        df = df[["v", "vw", "o", "c", "h", "l", "t", "n", "T"]]
-        # Overwrite original
-        df.to_parquet(path, index=False)
-        print("Done")
-
+    #print(pd.read_parquet("raw_data/data_1min_2025/batch_000.parquet"))
     all_tickers = get_all_tickers(path_raw_all_tickers, API_KEY)
     print(len(all_tickers))
     all_tickers_trimmed = filter_ticker_list_by_price_range(path_raw_tickers_trimmed,
