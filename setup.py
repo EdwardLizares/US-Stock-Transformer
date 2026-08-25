@@ -75,10 +75,10 @@ STEP = 1
 OUTPUT_DIM = 256
 DGF = None                          #* Degrees of Freedom for Student-t
 
-StockGPT_cfg = {
+StockBPT_cfg = {
     "name": f"StockGPT-B{PRESETS[ID]['bar_width']}",
-    "checkpoint_path": f"model_parameters/checkpoint_stock_gpt_{ID}min_residuals",
-    "best_path": f"model_parameters/best_stock_gpt_{ID}min_residuals",
+    "checkpoint_path": f"model_parameters/checkpoint_stock_bpt_{ID}min_residuals",
+    "best_path": f"model_parameters/best_stock_bpt_{ID}min_residuals",
     "input_features": INPUT_FEATURES,
     "target_features": TARGET_FEATURES,
     "bar_per_day": BAR_PER_DAY,
@@ -112,7 +112,7 @@ NaiveModel_cfg = {
 
 # Model Query -----------------------------------------------------------------------------------------
 
-#path_stockGPT_B1 = "model_parameters/best_stock_gpt_1min"
-#path_stockGPT_B5 = "model_parameters/best_stock_gpt_5min"
-path_stockGPT_B1r = "model_parameters/best_stock_gpt_1min_residuals"
-path_stockGPT_B5r = "model_parameters/best_stock_gpt_5min_residuals"
+#path_stockBPT_B1 = "model_parameters/best_stock_bpt_1min"
+#path_stockBPT_B5 = "model_parameters/best_stock_bpt_5min"
+path_stockBPT_B1r = "model_parameters/best_stock_bpt_1min_residuals"
+path_stockBPT_B5r = "model_parameters/best_stock_bpt_5min_residuals"

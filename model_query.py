@@ -3,7 +3,7 @@ import torch
 from pathlib import Path
 
 from setup import StockGPT_cfg
-from stock_gpt import StockGPT
+from stock_bpt import StockGPT
 
 def setup_model(source_model: Path):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -56,7 +56,7 @@ def print_prediction(prev, res, std, input_features, target_features):
             f"{s.item():>10.4f}"
         )
 if __name__ == "__main__":
-    model, device = setup_model("model_parameters/checkpoint_stock_gpt_1min_residuals")
+    model, device = setup_model("model_parameters/checkpoint_stock_bpt_1min_residuals")
     prev, mean, std = query_model(model, torch.randn(2, 389, len(StockGPT_cfg["input_features"])))
     print(mean, std)
     print(mean.shape)
