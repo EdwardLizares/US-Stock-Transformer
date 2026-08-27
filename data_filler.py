@@ -137,4 +137,4 @@ if __name__ == "__main__":
     with open("raw_data/all_tickers_trimmed_1_30", "r") as f:
         tickers = json.load(f)
     fill_data(path_data_scrapper, path_data_filler, DATE_RANGE)
-    print(debug('filled_raw_data/data_5min_2025', "Tk = 'TENX'"))
+    print(debug('filled_raw_data/data_15min_2024', "Tk = 'TENX'"))

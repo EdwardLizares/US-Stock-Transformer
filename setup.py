@@ -2,7 +2,9 @@ import pandas_market_calendars as mcal
 
 DEBUG = True
 API_KEY = "sdpbiDy3nfhuvQX2SBBtL6Gt2dl88ZrU"
-DATE_RANGE = mcal.get_calendar("NYSE").schedule("2025-01-01","2025-12-31").index
+YEAR_START = "2024"
+YEAR_END = "2025"
+DATE_RANGE = mcal.get_calendar("NYSE").schedule(f"{YEAR_START}-01-01",f"{YEAR_END}-12-31").index
 
 AVG_VOLUME_PERIOD = 90                                                  # 
 RV_THRESH = 5
@@ -12,25 +14,25 @@ MX = 30
 ID = 15
 PRESETS = {
     1: {
-        "file_name": "data_1min_2025",
+        "file_name": f"data_1min_{YEAR_START}",
         "timeframe": "1/minute",
         "bar_per_day": 390,
         "bar_width": 1
     },
     2: {
-        "file_name": "data_2min_2025",
+        "file_name": f"data_2min_{YEAR_START}",
         "timeframe": "2/minute",
         "bar_per_day": 195,
         "bar_width": 2
     },
     5: {
-        "file_name": "data_5min_2025",
+        "file_name": f"data_5min_{YEAR_START}",
         "timeframe": "5/minute",
         "bar_per_day": 78,
         "bar_width": 5,
     },
     15: {
-        "file_name": "data_15min_2025",
+        "file_name": f"data_15min_{YEAR_START}",
         "timeframe": "15/minute",
         "bar_per_day": 26,
         "bar_width": 15
@@ -66,7 +68,7 @@ PERSISTENT_WORKERS = True
 INPUT_FEATURES = ["bar", "vw", "ema9", "ema20", "macd", "o", "h", "l", "c",
                   "n", "rv", "f"]
 TARGET_FEATURES = ["o", "h", "l", "c"]
-FILE_LIMIT = 15
+FILE_LIMIT = 35
 FILE_START = 0
 
 # Stock GPT -----------------------------------------------------------------------------------------

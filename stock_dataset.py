@@ -5,7 +5,7 @@ import numpy as np
 from torch.utils.data import Dataset, get_worker_info
 from pathlib import Path
 
-from setup import StockGPT_cfg as cfg
+from setup import StockBPT_cfg as cfg
 
 class StockDataset(Dataset):
     def __init__(self, source_folder, file_limit = cfg["file_limit"], seq_len: int = cfg["seq_len"],

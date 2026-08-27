@@ -72,7 +72,7 @@ class StockTransformer(torch.nn.Module):
         x = x + self.ff(self.ln2(x))
         return x
 
-class StockGPT(torch.nn.Module):
+class StockBPT(torch.nn.Module):
     def __init__(self, cfg, train_norms = None, print_norms = True):
         super().__init__()
         self.cfg = cfg
