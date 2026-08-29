@@ -53,22 +53,35 @@ def gen_range_url(api_key: str, ticker: str, time_frame: str, d_stt, d_end):
            f"{d_stt}/{d_end}?adjusted=true&sort=asc&limit=50000&apiKey={api_key}")
 
 def data_scrapper_unit(url: str, max_retries: int = 2):
-    t0, t1 = time.time(), 0
-    for attempt in range(max_retries + 1):
-        try:
-            response = requests.get(url, timeout=30)
-            response.raise_for_status()
-            resp = response.json()
-            t1 = time.time()
-            if "results" not in resp or not resp["results"]:
-                return (True, pd.DataFrame(), t1 - t0)
-            return (True, pd.DataFrame(resp["results"]), t1 - t0)
-        except Exception as _:
-            if attempt < max_retries:
-                time.sleep(1 * (attempt + 1))  # brief backoff before retrying
-                continue
-            t_fail = time.time()
-            return (False, pd.DataFrame(), t_fail - t0)
+    t0 = time.time()
+    dfs = []
+
+    while url:
+        success = False
+        for attempt in range(max_retries + 1):
+            try:
+                response = requests.get(url, timeout=30)
+                response.raise_for_status()
+                resp = response.json()
+
+                #* Page handling
+                if "results" in resp and resp["results"]:
+                    dfs.append(pd.DataFrame(resp["results"]))
+                next_url = resp.get("next_url")
+
+                url = f"{next_url}&apiKey={API_KEY}" if next_url else None
+                success = True
+                break
+            except Exception:
+                if attempt < max_retries:
+                    time.sleep(attempt + 1)
+                else:
+                    return False, pd.DataFrame(), time.time() - t0
+        if not success:
+            break
+    if not dfs:
+        return True, pd.DataFrame(), time.time() - t0
+    return True, pd.concat(dfs, ignore_index=True), time.time() - t0
 
 def aggregate_scrapper_unit(api_key: str, date: str) -> tuple[bool, pd.DataFrame, int]:
     return data_scrapper_unit(gen_aggregate_url(api_key, date))
@@ -123,7 +136,7 @@ def scrape_data(api_key:str, output_folder: str, batch_size,
     d_stt, d_end = date_range[[0, -1]].strftime("%Y-%m-%d")
     pbar = tqdm(ticker_list, total=n, desc="Sending jobs to threads...".ljust(80), 
                 bar_format="|{bar}| {percentage:3.1f}% ({elapsed}) {desc}",)
-    with ThreadPoolExecutor(max_workers=20) as executor:
+    with ThreadPoolExecutor(max_workers=30) as executor:
         thread_jobs = {executor.submit(range_scrapper_unit, api_key, 
                                        tkr, date_range, time_frame): tkr for tkr in ticker_list }
 
@@ -167,7 +180,7 @@ def scrape_data(api_key:str, output_folder: str, batch_size,
 from pathlib import Path
 
 if __name__ == "__main__":
-    #print(pd.read_parquet("raw_data/data_1min_2025/batch_000.parquet"))
+    #print(pd.read_parquet("raw_data/data_1min_2021_2021/batch_000.parquet"))
     all_tickers = get_all_tickers(path_raw_all_tickers, API_KEY)
     print(len(all_tickers))
     all_tickers_trimmed = filter_ticker_list_by_price_range(path_raw_tickers_trimmed,
@@ -180,7 +193,7 @@ if __name__ == "__main__":
         output_folder=path_data_scrapper,
         ticker_list=all_tickers_trimmed,
         date_range=DATE_RANGE,
-        batch_size = 250,
+        batch_size = 50,
         time_frame=TIMEFRAME,
     )
 

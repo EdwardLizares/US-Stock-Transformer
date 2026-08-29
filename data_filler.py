@@ -6,8 +6,10 @@ import json
 
 from pathlib import Path
 
+from data_preprocessor import preprocess_data
+
 from setup import DATE_RANGE, BAR_PER_DAY, BAR_WIDTH
-from setup import path_data_scrapper, path_data_filler
+from setup import path_data_scrapper, path_data_filler, path_data_preprocessor
 
 def get_unix_timestamps(date_range: pd.DatetimeIndex, bar_width: int):
     return pd.to_datetime([
@@ -15,12 +17,12 @@ def get_unix_timestamps(date_range: pd.DatetimeIndex, bar_width: int):
         for date in date_range.strftime("%Y-%m-%d")
         for time in pd.date_range(
                         f"09:{30+bar_width}",
-                        f"16:00",
+                        f"16:00", 
                         freq=f"{bar_width}min"
                     ).strftime("%H:%M")
         ], format="%Y-%m-%d %H:%M").tz_localize("America/New_York").as_unit("ms").astype("int64")
 
-def fill_data(input_folder, output_folder, date_range):
+def fill_data(input_folder, output_folder, date_range, store = True):
     """
     Corrects for missing intraday data
     """
@@ -112,29 +114,43 @@ def fill_data(input_folder, output_folder, date_range):
             FROM forward_fill_step1
         """)
 
-        pbar.set_description(f"Saving file for {str(file_path.stem)}...")
+        output_path = Path(output_folder) / f"{file_path.stem}.parquet"
         con.execute(f"""
             COPY (
                 SELECT * EXCLUDE (c_ff)
                 FROM forward_fill_step2
                 WHERE c IS NOT NULL
             )
-            TO '{output_folder}/{file_path.stem}.parquet'
+            TO '{output_path}'
             (FORMAT PARQUET)
         """)
         con.execute("DROP TABLE raw_data")
 
-def debug(source_path, condition = "True"):
-    db = duckdb.sql(f"""
-        SELECT *
-        FROM read_parquet('{source_path}/batch_005.parquet')
-        WHERE {condition}
-        ORDER BY Tk, t
+        if store:
+            pbar.set_description(f"Saving file for {str(file_path.stem)}...")
+        else:
+            #* Processed immediately
+            preprocess_data(output_folder, path_data_preprocessor, date_range)
+            output_path.unlink()
+
+def debug():
+    db = duckdb.sql("""
+        SELECT
+            Tk,
+            MIN(date) AS first_date,
+            MAX(date) AS last_date,
+            COUNT(*) AS rows
+        FROM read_parquet(
+            'filled_raw_data/data_1min_2023_2025/batch_000.parquet'
+        )
+        WHERE Tk = 'AEF'
+        GROUP BY Tk
     """)
-    return db
+
+    print(db)
 
 if __name__ == "__main__":
     with open("raw_data/all_tickers_trimmed_1_30", "r") as f:
         tickers = json.load(f)
-    fill_data(path_data_scrapper, path_data_filler, DATE_RANGE)
-    print(debug('filled_raw_data/data_15min_2024', "Tk = 'TENX'"))
+    fill_data(path_data_scrapper, path_data_filler, DATE_RANGE, False)
+    #print(debug())

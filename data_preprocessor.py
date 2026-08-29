@@ -5,7 +5,7 @@ import pandas as pd
 from tqdm import tqdm
 from pathlib import Path  
 
-from setup import AVG_VOLUME_PERIOD, RV_THRESH, MN, MX, BAR_PER_DAY, INPUT_FEATURES, DATE_RANGE, SPLIT
+from setup import AVG_VOLUME_PERIOD, RV_THRESH, MN, MX, BAR_PER_DAY, INPUT_FEATURES, DATE_RANGE, SPLIT, DEBUG
 from setup import path_data_filler, path_data_preprocessor
 
 class ProcessingError(Exception):
@@ -41,9 +41,6 @@ def calculate_additional_hyperparameters(df: pd.DataFrame, pbar = None) -> pd.Da
         )
     )
     df["macd"] = (df["ema12"]-df["ema26"])
-    p_c = df.groupby("Tk")["c"].shift(1)
-    df["gp"] = (df["o"] - p_c) / p_c * 100
-    df["cp"] = (df["c"] - df["o"]) / df["c"] * 100
     df["rv"] = df["v"] / df["av"]
 
     #n_o = df.groupby("T_1")["o"].shift(-1)
@@ -65,10 +62,12 @@ def filter_data(df: pd.DataFrame, pbar = None) -> pd.DataFrame:
     """
     if pbar is not None:
         pbar.set_description("Filtering data...".ljust(80))
-    rv_mask = (df.groupby(["Tk", "date"])["rv"].transform("max")>RV_THRESH)
-    df = df[rv_mask]
+    day_low = df.groupby(["Tk", "date"])["l"].transform("min")
+    day_high = df.groupby(["Tk", "date"])["h"].transform("max")
+    range_mask = ((day_high - day_low) / day_low) >= 0.10
+    df = df[range_mask]
     pc_mask = ((df.groupby(["Tk", "date"])["l"].transform("min")<=MX) &
-               (df.groupby(["Tk", "date"])["h"].transform("min")>MN))
+               (df.groupby(["Tk", "date"])["h"].transform("min")>=MN))
     df = df[pc_mask]
 
     nan_mask = (df.groupby(["Tk", "date"])["rv"].transform("count") < BAR_PER_DAY)
@@ -132,7 +131,8 @@ def preprocess_data(source_folder: str, output_folder: str, date_range, split = 
                 with pa.ipc.new_file(sink, table.schema) as writer:
                     writer.write_table(table)
 
-    pbar.set_description("Data preprocessing complete")
+    if DEBUG:
+        pbar.set_description("Data preprocessing complete")
 
 def debug():
     path = "preprocessed_data/data_5min_2025/train/batch0.arrow"
