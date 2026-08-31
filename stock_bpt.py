@@ -84,8 +84,13 @@ class StockBPT(torch.nn.Module):
             *[StockTransformer(cfg) for _ in range(cfg["n_transformers"])]
         )
         self.final_norm = LayerNorm(cfg["output_dim"])
+        #self.mean_head = torch.nn.Sequential(
+        #    torch.nn.Linear(cfg["output_dim"], cfg["output_dim"]//2, False),
+        #    torch.nn.GELU(),
+        #    torch.nn.Linear(cfg["output_dim"]//2, len(cfg["target_features"]), False),
+        #)
+        #self.std_head = torch.nn.Linear(cfg["output_dim"], len(cfg["target_features"]), False)
         self.out_head = torch.nn.Linear(cfg["output_dim"], 2*len(cfg["target_features"]), False)
-        #self.log_std_scale = torch.nn.Parameter(torch.zeros(len(cfg["target_features"])))
 
         if train_norms is None:
             train_norms = (
@@ -112,10 +117,11 @@ class StockBPT(torch.nn.Module):
         x = proj + pos_emb
         x = self.transformer_blocks(x)
         x = self.final_norm(x)
+        #mean = self.mean_head(x)
+        #std = self.std_head(x)
         x = self.out_head(x)
         mean, raw_std = x.chunk(2, dim=-1)
         std = torch.nn.functional.softplus(raw_std) + 1e-6
-        std = std # * torch.exp(self.log_std_scale)
         return mean, std
 
 class LinearModel(torch.nn.Module):

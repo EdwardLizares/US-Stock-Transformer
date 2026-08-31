@@ -11,8 +11,8 @@ RV_THRESH = 5
 MN = 1                                                                  # Pre-culls tickers for price
 MX = 20     
 
-VERSION = "v2"
-ID = 5
+VERSION = "v1"
+ID = 1
 PRESETS = {
     1: {
         "file_name": f"data_1min_{YEAR_START}_{YEAR_END}",
@@ -20,7 +20,7 @@ PRESETS = {
         "bar_per_day": 390,
         "bar_width": 1,
         "n_transformers": 4,
-        "file_limit": 50
+        "file_limit": 183
     },
     5: {
         "file_name": f"data_5min_{YEAR_START}_{YEAR_END}",
@@ -28,7 +28,7 @@ PRESETS = {
         "bar_per_day": 78,
         "bar_width": 5,
         "n_transformers": 4,
-        "file_limit": 182
+        "file_limit": 183
     },
 }
 
@@ -70,9 +70,9 @@ OUTPUT_DIM = 256
 DGF = None                          #* Degrees of Freedom for Student-t
 
 StockBPT_cfg = {
-    "name": f"StockGPT-B{PRESETS[ID]['bar_width']}H{STEP}r_{VERSION}",
-    "checkpoint_path": f"model_parameters/checkpoint_stock_bpt_B{ID}H{STEP}r_{VERSION}",
-    "best_path": f"model_parameters/best_stock_bpt_B{ID}H{STEP}r_{VERSION}",
+    "name": f"StockGPT-B{PRESETS[ID]['bar_width']}H{STEP}rp_{VERSION}",
+    "checkpoint_path": f"model_parameters/checkpoint_stock_bpt_B{ID}H{STEP}rp_{VERSION}",
+    "best_path": f"model_parameters/best_stock_bpt_B{ID}H{STEP}rp_{VERSION}",
     "input_features": INPUT_FEATURES,
     "target_features": TARGET_FEATURES,
     "bar_per_day": BAR_PER_DAY,
@@ -86,9 +86,9 @@ StockBPT_cfg = {
 }
 
 LinearModel_cfg = {
-    "name": f"LinearModel-B{PRESETS[ID]['bar_width']}H{STEP}r_{VERSION}",
-    "checkpoint_path": f"model_parameters/checkpoint_linear_model_B{ID}H{STEP}r_{VERSION}",
-    "best_path": f"model_parameters/best_linear_model_B{ID}H{STEP}r_{VERSION}",
+    "name": f"LinearModel-B{PRESETS[ID]['bar_width']}H{STEP}rp_{VERSION}",
+    "checkpoint_path": f"model_parameters/checkpoint_linear_model_B{ID}H{STEP}rp_{VERSION}",
+    "best_path": f"model_parameters/best_linear_model_B{ID}H{STEP}rp_{VERSION}",
     "input_features": INPUT_FEATURES,
     "target_features": TARGET_FEATURES,
     "seq_len": SEQ_LEN,

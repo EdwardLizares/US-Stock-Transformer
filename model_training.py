@@ -11,25 +11,28 @@ def get_dist(mean, std, dgf = DGF):
         dist = torch.distributions.StudentT(dgf, mean, std)
     return dist
 
-def batch_loss(x, y, model, dgf = DGF):
+def batch_loss(x, y, model):
     """
     Assume x and y are on the correct device already \n
     Returns NLL for back propagation
     """
     mean, std = model(x)
-    dist = get_dist(mean, std, dgf)
+    dist = get_dist(mean, std)
     y_norm = (y - model.target_mean) / model.target_std
 
     return -dist.log_prob(y_norm).mean()
+
 
 def eval_loss(data_loader, model, device, max_batches = float("inf"), pbar = None, desc="") -> dict: 
     """
     Returns a dict of MAE loss and Negative Log Loss
     """
     num_batches = min(len(data_loader), max_batches)
-    avg_mae = 0
     avg_nll = 0
+    avg_mae = 0
+    avg_rmae = 0
     avg_std = 0
+    avg_rstd = 0
     avg_z2 = 0
 
     for i, (p, t) in enumerate(data_loader):
@@ -47,6 +50,9 @@ def eval_loss(data_loader, model, device, max_batches = float("inf"), pbar = Non
             #* MAE per target column
             mae = torch.abs(mean - t_norm).mean(dim=(0, 1))
 
+            #* raw MAE per target column
+            rmae = mae * model.target_std
+
             #* NLL per target column
             dist = get_dist(mean, std)
             nll = -dist.log_prob(t_norm).mean(dim=(0, 1))
@@ -54,20 +60,25 @@ def eval_loss(data_loader, model, device, max_batches = float("inf"), pbar = Non
             #* Predicted STD per target column
             col_std = std.mean(dim=(0, 1))
 
+            #* raw STD
+            rstd = col_std * model.target_std
+
             #* Z statistics
             z = (t_norm - mean) / std.clamp_min(1e-6)
             z2 = z.pow(2).mean(dim=(0, 1))
 
-        avg_mae += (mae - avg_mae) / (i+1)
         avg_nll += (nll - avg_nll) / (i+1)
+        avg_mae += (mae - avg_mae) / (i+1)
+        avg_rmae += (rmae - avg_rmae) / (i+1)
         avg_std += (col_std - avg_std) / (i+1)
+        avg_rstd += (rstd - avg_rstd) / (i+1)
         avg_z2 += (z2 - avg_z2) / (i+1)
 
         if pbar is not None:
             pbar.update(1)
             if i % max(1,int(num_batches*0.001))==0:
                 pbar.set_description(f"{desc} ({i}/{num_batches}) [{pbar.n}/{pbar.total}]")
-    return {"NLL": avg_nll, "STD": avg_std, "MAE": avg_mae, "Z^2": avg_z2}
+    return {"NLL": avg_nll, "MAE": avg_mae, "RMAE": avg_rmae, "STD": avg_std, "RSTD": avg_rstd, "Z^2": avg_z2}
 
 def load_model(path, model, device, optimizer=None, cuda_scaler=None, scheduler=None):
     checkpoint = torch.load(path, map_location=device)
@@ -149,13 +160,16 @@ def train_model_cuda(model, device, optimizer, cuda_scaler, scheduler, max_epoch
             model.eval()
             pbar.set_description(f"Evaluating Epoch {epoch}... [{pbar.n}/{pbar.total}]")
             train_metrics, val_metrics = evaluate_model(train_dl, val_dl, model, device, eval_bs, pbar)
+
             pbar.write((
                         f"Epoch {epoch+1}:\n"
                         f"Training Loss:\n"
                         f"   (MAE) {train_metrics['MAE'].mean()}\n"
+                        f"   ($$$) {train_metrics['RMAE'].mean()}\n"
                         f"   (NLL) {train_metrics['NLL'].mean()}\n"
                         f"Validation Loss:\n"
                         f"   (MAE) {val_metrics['MAE'].mean()}\n"
+                        f"   ($$$) {val_metrics['RMAE'].mean()}\n"
                         f"   (NLL) {val_metrics['NLL'].mean()}\n"))
             train_losses.append(train_metrics)
             val_losses.append(val_metrics)

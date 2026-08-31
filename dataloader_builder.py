@@ -35,11 +35,13 @@ def calculate_training_norms(source_folder, input_features, target_features,
                 [table[col].to_numpy() for col in target_features]
             ).astype(np.float64, copy=False)
 
-            #* Converts to residuals
+            #* Converts to residual %
             n_days = len(y) // bar_per_day
             y = y[:n_days * bar_per_day]
             y = y.reshape(n_days, bar_per_day, len(target_features))
-            y = y[:, step:, :] - y[:, :-step, :]
+            current = y[:, :-step, :]
+            future = y[:, step:, :]
+            y = (future - current) / current
             y = y.reshape(-1, len(target_features))
 
             input_sum += x.sum(axis=0)
@@ -66,7 +68,7 @@ def calculate_training_norms(source_folder, input_features, target_features,
         torch.tensor(target_std, dtype=torch.float32),
     ]
 
-def build_dataloaders(source_folder: str, 
+def build_dataloaders(source_folder: str, train_val = True,
                       input_features = INPUT_FEATURES,
                       target_features = TARGET_FEATURES,
                       batch_size = BATCH_SIZE,
@@ -77,17 +79,21 @@ def build_dataloaders(source_folder: str,
     """
     Returns a dictionary of train-val-test dataloaders and the training norms
     """
-    train_norms = calculate_training_norms(f"{source_folder}/train", input_features, target_features)
+    train_norms = None
+    if train_val:
+        train_norms = calculate_training_norms(f"{source_folder}/train", input_features, target_features)
+
     datasets = {subfolder.name : StockDataset(subfolder) for subfolder in list(Path(source_folder).glob("*/"))}
 
     print(f"Building DataLoaders...")
     dataloaders = {ds_key : DataLoader(datasets[ds_key], batch_size = batch_size, drop_last = drop_last, 
                                        num_workers = num_workers, persistent_workers=persistent_workers,
                                        pin_memory = pin_memory) for ds_key in datasets.keys()}
-    print(f"Train dataset samples: {len(datasets['train']):,}")
-    print(f"Train loader batches:  {len(dataloaders['train']):,}")
-    print(f"Batch size:            {batch_size}")
+    if train_val:
+        print(f"Train dataset samples: {len(datasets['train']):,}")
+        print(f"Train loader batches:  {len(dataloaders['train']):,}")
+        print(f"Batch size:            {batch_size}")
     return dataloaders, train_norms
 
 if __name__ == "__main__":
-    dataloaders, train_norms = build_dataloaders(path_data_preprocessor)
+    dataloaders, train_norms = build_dataloaders(path_data_preprocessor, False)

@@ -62,10 +62,12 @@ def filter_data(df: pd.DataFrame, pbar = None) -> pd.DataFrame:
     """
     if pbar is not None:
         pbar.set_description("Filtering data...".ljust(80))
+
     day_low = df.groupby(["Tk", "date"])["l"].transform("min")
     day_high = df.groupby(["Tk", "date"])["h"].transform("max")
     range_mask = ((day_high - day_low) / day_low) >= 0.10
     df = df[range_mask]
+
     pc_mask = ((df.groupby(["Tk", "date"])["l"].transform("min")<=MX) &
                (df.groupby(["Tk", "date"])["h"].transform("min")>=MN))
     df = df[pc_mask]
@@ -89,7 +91,10 @@ def preprocess_data(source_folder: str, output_folder: str, date_range, split = 
 
     #* CREATE OUTPUT FOLDERS
     output_folder = Path(output_folder)
-    for split_name in ["train", "val", "test"]:
+    split_names = ["train", "val", "test"]
+    if split == [0,0]:
+        split_names = ["test"]
+    for split_name in split_names:
         (output_folder / split_name).mkdir(parents=True, exist_ok=True)
 
     file_paths = sorted(Path(source_folder).glob("*.parquet"))
@@ -98,7 +103,7 @@ def preprocess_data(source_folder: str, output_folder: str, date_range, split = 
     for imputed_batch_path in pbar:
         output_paths = {
             split_name: output_folder/ split_name / imputed_batch_path.with_suffix(".arrow").name
-            for split_name in ["train", "val", "test"]
+            for split_name in split_names
         }
         if all(path.exists() for path in output_paths.values()):
             pbar.write(f"{imputed_batch_path} has already been preprocessed...")
@@ -115,9 +120,12 @@ def preprocess_data(source_folder: str, output_folder: str, date_range, split = 
         float_cols = df.select_dtypes(include=["float64"]).columns
         df[float_cols] = df[float_cols].astype("float32")
 
-        split_dfs = {"train": df[df["date"] <= train_end],
-                     "val": df[(df["date"] > train_end) & (df["date"] < val_end)],
-                     "test": df[df["date"] >= val_end]}
+        if split == [0,0]:
+            split_dfs = {"test": df}
+        else:
+            split_dfs = {"train": df[df["date"] <= train_end],
+                        "val": df[(df["date"] > train_end) & (df["date"] < val_end)],
+                        "test": df[df["date"] >= val_end]}
 
         for split_name, split_df in split_dfs.items():
             output_path = output_paths[split_name]

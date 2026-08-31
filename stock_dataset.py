@@ -86,7 +86,8 @@ class StockDataset(Dataset):
         y = np.column_stack([
             y_table[col].to_numpy() for col in self.target_features
         ]).astype(np.float32, copy=False)
-        y = y - x[:, self.target_indices]
+        cur = x[:, self.target_indices]
+        y = (y - cur) / cur
 
         return torch.from_numpy(x), torch.from_numpy(y)
 
