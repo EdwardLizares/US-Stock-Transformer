@@ -51,29 +51,68 @@ def calculate_additional_hyperparameters(df: pd.DataFrame, pbar = None) -> pd.Da
 
     return df
 
+def calculate_ibkr_rv(df: pd.DataFrame, pbar=None) -> pd.DataFrame:
+    if pbar is not None:
+        pbar.set_description("Calculating IBKR RV...".ljust(80))
+
+    df = df.sort_values(["Tk", "t"])
+    daily_volume = (
+        df.groupby(["Tk", "date"])["v"].sum()
+        .rename("daily_v").reset_index()
+    )
+    daily_volume = daily_volume.sort_values(["Tk", "date"])
+    daily_volume["avg_daily_v"] = (
+        daily_volume.groupby("Tk")["daily_v"].transform(
+            lambda x: x.shift(1).rolling(90).mean()
+        )
+    )
+
+    df = df.merge(daily_volume[["Tk", "date", "avg_daily_v"]], 
+                  on=["Tk", "date"], how="left")
+    
+    df["cum_v"] = (df.groupby(["Tk", "date"])["v"].cumsum())
+    df["ibkr_rv"] = (df["cum_v"] / df["avg_daily_v"])
+    return df
+
 def engineer_data(df: pd.DataFrame, pbar = None) -> pd.DataFrame:
     df = calculate_additional_hyperparameters(df, pbar)
+    df = calculate_ibkr_rv(df, pbar)
     return df
 
 def filter_data(df: pd.DataFrame, pbar = None) -> pd.DataFrame:
     """
-    Filters for RV and Price
-    Additionally removes days with any NaN rv
+    Filters data
+    Current: 10% range, Price 1-20, Rv>tresh
     """
     if pbar is not None:
         pbar.set_description("Filtering data...".ljust(80))
 
+    #* Range filter
     day_low = df.groupby(["Tk", "date"])["l"].transform("min")
     day_high = df.groupby(["Tk", "date"])["h"].transform("max")
     range_mask = ((day_high - day_low) / day_low) >= 0.10
     df = df[range_mask]
 
+    #* Price filter
     pc_mask = ((df.groupby(["Tk", "date"])["l"].transform("min")<=MX) &
                (df.groupby(["Tk", "date"])["h"].transform("min")>=MN))
     df = df[pc_mask]
 
     nan_mask = (df.groupby(["Tk", "date"])["rv"].transform("count") < BAR_PER_DAY)
     df = df[~nan_mask]
+
+    #* Rv filter
+    print("Before RV filter:",
+        df.groupby(["Tk", "date"]).ngroups,
+        len(df))
+
+    ibkr_nan_mask = (df.groupby(["Tk", "date"])["ibkr_rv"].transform("count")
+                     < BAR_PER_DAY)
+    df = df[~ibkr_nan_mask]
+
+    print("After RV filter:",
+        df.groupby(["Tk", "date"]).ngroups,
+        len(df))
 
     return df
 
@@ -115,7 +154,7 @@ def preprocess_data(source_folder: str, output_folder: str, date_range, split = 
         df = engineer_data(df, pbar)
         df = filter_data(df, pbar)
         df = df.sort_values(["date", "Tk", "bar"])
-        df = df[INPUT_FEATURES+["Tk", "date"]]
+        df = df[INPUT_FEATURES+["Tk", "date", "ibkr_rv"]]
 
         float_cols = df.select_dtypes(include=["float64"]).columns
         df[float_cols] = df[float_cols].astype("float32")
@@ -150,7 +189,39 @@ def debug():
 
     print(table)
 
+def refilter_arrow_files(source_folder, output_folder):
+    source_folder = Path(source_folder)
+    output_folder = Path(output_folder)
+
+    for split_name in ["train", "val", "test"]:
+        split_source = source_folder / split_name
+        split_output = output_folder / split_name
+        split_output.mkdir(parents=True, exist_ok=True)
+
+        files = sorted(split_source.glob("*.arrow"))
+        for file_path in tqdm(files, desc=f"Filtering {split_name}"):
+            with pa.memory_map(str(file_path), "r") as source:
+                reader = pa.ipc.open_file(source)
+                table = reader.read_all()
+
+            df = table.to_pandas()
+            daily_max_rv = df.groupby(["Tk", "date"])["rv"].max()
+            print(daily_max_rv.describe(
+                percentiles=[.01, .05, .1, .25, .5, .75, .9, .95, .99]
+            ))
+            df = filter_data(df)
+
+            output_path = split_output / file_path.name
+            table = pa.Table.from_pandas(
+                df,
+                preserve_index=False
+            )
+
+            with pa.OSFile(str(output_path), "wb") as sink:
+                with pa.ipc.new_file(sink, table.schema) as writer:
+                    writer.write_table(table)
+
 if __name__ == "__main__":
-    preprocess_data(path_data_filler, path_data_preprocessor, DATE_RANGE, SPLIT)
+    #preprocess_data(path_data_filler, path_data_preprocessor, DATE_RANGE, SPLIT)
     #print(debug())
-    
+    refilter_arrow_files("preprocessed_data/10p/data_1min_2021_2026", "preprocessed_data/data_1min_2021_2026")

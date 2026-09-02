@@ -130,7 +130,7 @@ def fill_data(input_folder, output_folder, date_range, store = True):
             pbar.set_description(f"Saving file for {str(file_path.stem)}...")
         else:
             #* Processed immediately
-            preprocess_data(output_folder, path_data_preprocessor, date_range, [0,0])
+            preprocess_data(output_folder, path_data_preprocessor, date_range)
             output_path.unlink()
 
 def debug():

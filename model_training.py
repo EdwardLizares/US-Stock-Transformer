@@ -18,6 +18,7 @@ def batch_loss(x, y, model):
     """
     mean, std = model(x)
     dist = get_dist(mean, std)
+
     y_norm = (y - model.target_mean) / model.target_std
 
     return -dist.log_prob(y_norm).mean()
@@ -45,27 +46,35 @@ def eval_loss(data_loader, model, device, max_batches = float("inf"), pbar = Non
         with torch.autocast(device_type="cuda", dtype=torch.float16):
             mean, std = model(p)
 
-            t_norm = (t - model.target_mean) / model.target_std
+        mean = mean.float()
+        std = std.float()
+        t_norm = ((t - model.target_mean) / model.target_std).float()
 
-            #* MAE per target column
-            mae = torch.abs(mean - t_norm).mean(dim=(0, 1))
+        #* MAE per target column
+        mae = torch.abs(mean - t_norm).mean(dim=(0, 1))
 
-            #* raw MAE per target column
-            rmae = mae * model.target_std
+        #* raw MAE per target column
+        rmae = mae * model.target_std
 
-            #* NLL per target column
-            dist = get_dist(mean, std)
-            nll = -dist.log_prob(t_norm).mean(dim=(0, 1))
+        #* NLL per target column
+        dist = get_dist(mean, std)
+        nll = -dist.log_prob(t_norm).mean(dim=(0, 1))
 
-            #* Predicted STD per target column
-            col_std = std.mean(dim=(0, 1))
+        #* Predicted STD per target column
+        if DGF is None:
+            pred_std = std
+        else:
+            pred_std = std * (
+                DGF / (DGF - 2)
+            ) ** 0.5
+        col_std = pred_std.mean(dim=(0, 1))
 
-            #* raw STD
-            rstd = col_std * model.target_std
+        #* raw STD
+        rstd = col_std * model.target_std
 
-            #* Z statistics
-            z = (t_norm - mean) / std.clamp_min(1e-6)
-            z2 = z.pow(2).mean(dim=(0, 1))
+        #* Z statistics
+        z = (t_norm - mean) / pred_std.clamp_min(1e-6)
+        z2 = z.pow(2).mean(dim=(0, 1))
 
         avg_nll += (nll - avg_nll) / (i+1)
         avg_mae += (mae - avg_mae) / (i+1)

@@ -7,11 +7,10 @@ YEAR_END = "2026"
 DATE_RANGE = mcal.get_calendar("NYSE").schedule(f"{YEAR_START}-08-01",f"{YEAR_END}-12-31").index
 
 AVG_VOLUME_PERIOD = 90                                                  # 
-RV_THRESH = 5
+RV_THRESH = 4.5
 MN = 1                                                                  # Pre-culls tickers for price
 MX = 20     
 
-VERSION = "v1"
 ID = 1
 PRESETS = {
     1: {
@@ -20,7 +19,7 @@ PRESETS = {
         "bar_per_day": 390,
         "bar_width": 1,
         "n_transformers": 4,
-        "file_limit": 183
+        "file_limit": 50
     },
     5: {
         "file_name": f"data_5min_{YEAR_START}_{YEAR_END}",
@@ -33,6 +32,8 @@ PRESETS = {
 }
 
 FILE_LIMIT = PRESETS[ID]["file_limit"]
+VERSION = f"{FILE_LIMIT}"
+
 # Data Scrapper ----------------------------------------------------------------------------------------
 TIMEFRAME = PRESETS[ID]["timeframe"]                                    # OHLC Bar Widths in url                                                            
 
@@ -51,7 +52,7 @@ path_data_filler = f"filled_raw_data/{PRESETS[ID]['file_name']}"        #*Output
 # Data Preprocessor ------------------------------------------------------------------------------------
 BAR_PER_DAY = PRESETS[ID]["bar_per_day"]
 
-path_data_preprocessor = f"preprocessed_data/{PRESETS[ID]['file_name']}_{VERSION}"       #*Output path of data_preprocessor
+path_data_preprocessor = f"preprocessed_data/{PRESETS[ID]['file_name']}"       #*Output path of data_preprocessor
 
 # Dataloader Builder -------------------------------------------------------------------------------------- 
 
@@ -61,18 +62,18 @@ NUM_WORKERS = 2
 PERSISTENT_WORKERS = True
 INPUT_FEATURES = ["bar", "vw", "ema9", "ema20", "macd", "o", "h", "l", "c",
                   "n", "rv", "f"]
-TARGET_FEATURES = ["o", "h", "l", "c"]
+TARGET_FEATURES = ["c"] #["o", "h", "l", "c"]
 
 # Stock GPT -----------------------------------------------------------------------------------------
 STEP = 1                            #! FUTURE HORIZON
 SEQ_LEN = BAR_PER_DAY - STEP
 OUTPUT_DIM = 256
-DGF = None                          #* Degrees of Freedom for Student-t
+DGF = 3                          #* Degrees of Freedom for Student-t
 
 StockBPT_cfg = {
-    "name": f"StockGPT-B{PRESETS[ID]['bar_width']}H{STEP}rp_{VERSION}",
-    "checkpoint_path": f"model_parameters/checkpoint_stock_bpt_B{ID}H{STEP}rp_{VERSION}",
-    "best_path": f"model_parameters/best_stock_bpt_B{ID}H{STEP}rp_{VERSION}",
+    "name": f"StockGPT-B{PRESETS[ID]['bar_width']}H{STEP}F{DGF}crp_{VERSION}",
+    "checkpoint_path": f"model_parameters/checkpoint_stock_bpt_B{ID}H{STEP}F{DGF}crp_{VERSION}",
+    "best_path": f"model_parameters/best_stock_bpt_B{ID}H{STEP}F{DGF}crp_{VERSION}",
     "input_features": INPUT_FEATURES,
     "target_features": TARGET_FEATURES,
     "bar_per_day": BAR_PER_DAY,
@@ -86,9 +87,9 @@ StockBPT_cfg = {
 }
 
 LinearModel_cfg = {
-    "name": f"LinearModel-B{PRESETS[ID]['bar_width']}H{STEP}rp_{VERSION}",
-    "checkpoint_path": f"model_parameters/checkpoint_linear_model_B{ID}H{STEP}rp_{VERSION}",
-    "best_path": f"model_parameters/best_linear_model_B{ID}H{STEP}rp_{VERSION}",
+    "name": f"LinearModel-B{PRESETS[ID]['bar_width']}H{STEP}F{DGF}crp_{VERSION}",
+    "checkpoint_path": f"model_parameters/checkpoint_linear_model_B{ID}H{STEP}F{DGF}crp_{VERSION}",
+    "best_path": f"model_parameters/best_linear_model_B{ID}H{STEP}F{DGF}crp_{VERSION}",
     "input_features": INPUT_FEATURES,
     "target_features": TARGET_FEATURES,
     "seq_len": SEQ_LEN,
