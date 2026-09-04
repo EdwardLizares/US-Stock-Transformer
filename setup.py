@@ -7,7 +7,7 @@ YEAR_END = "2026"
 DATE_RANGE = mcal.get_calendar("NYSE").schedule(f"{YEAR_START}-08-01",f"{YEAR_END}-12-31").index
 
 AVG_VOLUME_PERIOD = 90                                                  # 
-RV_THRESH = 4.5
+RV_THRESH = 0.75
 MN = 1                                                                  # Pre-culls tickers for price
 MX = 20     
 
@@ -62,18 +62,18 @@ NUM_WORKERS = 2
 PERSISTENT_WORKERS = True
 INPUT_FEATURES = ["bar", "vw", "ema9", "ema20", "macd", "o", "h", "l", "c",
                   "n", "rv", "f"]
-TARGET_FEATURES = ["c"] #["o", "h", "l", "c"]
+TARGET_FEATURES = ["o", "h", "l", "c"]
 
 # Stock GPT -----------------------------------------------------------------------------------------
 STEP = 1                            #! FUTURE HORIZON
 SEQ_LEN = BAR_PER_DAY - STEP
 OUTPUT_DIM = 256
-DGF = 3                          #* Degrees of Freedom for Student-t
+DGF = 2.25                          #* Degrees of Freedom for Student-t
 
 StockBPT_cfg = {
-    "name": f"StockGPT-B{PRESETS[ID]['bar_width']}H{STEP}F{DGF}crp_{VERSION}",
-    "checkpoint_path": f"model_parameters/checkpoint_stock_bpt_B{ID}H{STEP}F{DGF}crp_{VERSION}",
-    "best_path": f"model_parameters/best_stock_bpt_B{ID}H{STEP}F{DGF}crp_{VERSION}",
+    "name": f"StockGPT-v{ID}{STEP}-{DGF}-{RV_THRESH}-{VERSION}",
+    "checkpoint_path": f"model_parameters/checkpoint_stock_bpt_v{ID}{STEP}-{DGF}-{RV_THRESH}-{VERSION}",
+    "best_path": f"model_parameters/best_stock_bpt_v{ID}{STEP}-{DGF}-{RV_THRESH}-{VERSION}",
     "input_features": INPUT_FEATURES,
     "target_features": TARGET_FEATURES,
     "bar_per_day": BAR_PER_DAY,
@@ -87,9 +87,9 @@ StockBPT_cfg = {
 }
 
 LinearModel_cfg = {
-    "name": f"LinearModel-B{PRESETS[ID]['bar_width']}H{STEP}F{DGF}crp_{VERSION}",
-    "checkpoint_path": f"model_parameters/checkpoint_linear_model_B{ID}H{STEP}F{DGF}crp_{VERSION}",
-    "best_path": f"model_parameters/best_linear_model_B{ID}H{STEP}F{DGF}crp_{VERSION}",
+    "name": f"LinearModel-v{ID}{STEP}-{DGF}-{RV_THRESH}-{VERSION}",
+    "checkpoint_path": f"model_parameters/checkpoint_linear_model_v{ID}{STEP}-{DGF}-{RV_THRESH}-{VERSION}",
+    "best_path": f"model_parameters/best_linear_model_v{ID}{STEP}-{DGF}-{RV_THRESH}-{VERSION}",
     "input_features": INPUT_FEATURES,
     "target_features": TARGET_FEATURES,
     "seq_len": SEQ_LEN,

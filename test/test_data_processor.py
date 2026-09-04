@@ -1,7 +1,7 @@
 import unittest
 import pandas as pd
 
-from app import App
+from archived_scripts.app import App
 
 class TestApp(unittest.TestCase):
     def test_process_data(self):

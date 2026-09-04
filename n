@@ -1,0 +1,45 @@
+[33mb6aca53[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m Various Changes: Added handpicking functionality to test practical accuracy of models, added model development changes
+ .gitignore                                         |   2 [32m+[m
+ app.py                                             | 462 [31m---------------------[m
+ data_filler.py                                     | 235 [32m++++++[m[31m-----[m
+ data_handpicker.py                                 |  55 [32m+++[m
+ data_preprocessor.py                               | 108 [32m+++[m[31m--[m
+ data_scrapper.py                                   |   2 [32m+[m
+ .../batch_000/duckdb_temp_storage_DEFAULT-0.tmp    | Bin [31m0[m -> [32m279183360[m bytes
+ .../batch_000/duckdb_temp_storage_S128K-0.tmp      | Bin [31m0[m -> [32m13107200[m bytes
+ .../batch_000/duckdb_temp_storage_S160K-0.tmp      | Bin [31m0[m -> [32m10321920[m bytes
+ .../batch_000/duckdb_temp_storage_S192K-0.tmp      | Bin [31m0[m -> [32m13565952[m bytes
+ .../batch_000/duckdb_temp_storage_S224K-0.tmp      | Bin [31m0[m -> [32m917504[m bytes
+ .../batch_000/duckdb_temp_storage_S32K-0.tmp       | Bin [31m0[m -> [32m15040512[m bytes
+ .../batch_000/duckdb_temp_storage_S64K-0.tmp       | Bin [31m0[m -> [32m21561344[m bytes
+ .../batch_000/duckdb_temp_storage_S96K-0.tmp       | Bin [31m0[m -> [32m28901376[m bytes
+ .../batch_001/duckdb_temp_storage_DEFAULT-0.tmp    | Bin [31m0[m -> [32m454819840[m bytes
+ .../batch_001/duckdb_temp_storage_S128K-0.tmp      | Bin [31m0[m -> [32m22675456[m bytes
+ .../batch_001/duckdb_temp_storage_S160K-0.tmp      | Bin [31m0[m -> [32m18677760[m bytes
+ .../batch_001/duckdb_temp_storage_S192K-0.tmp      | Bin [31m0[m -> [32m21430272[m bytes
+ .../batch_001/duckdb_temp_storage_S224K-0.tmp      | Bin [31m0[m -> [32m1835008[m bytes
+ .../batch_001/duckdb_temp_storage_S32K-0.tmp       | Bin [31m0[m -> [32m22773760[m bytes
+ .../batch_001/duckdb_temp_storage_S64K-0.tmp       | Bin [31m0[m -> [32m38141952[m bytes
+ .../batch_001/duckdb_temp_storage_S96K-0.tmp       | Bin [31m0[m -> [32m49643520[m bytes
+ handpicked_data/test/AEHL_2026-08-31.arrow         | Bin [31m0[m -> [32m34114[m bytes
+ handpicked_data/test/BAK_2026-09-2.arrow           | Bin [31m0[m -> [32m33730[m bytes
+ handpicked_data/test/BIAF_2026-09-01.arrow         | Bin [31m0[m -> [32m34114[m bytes
+ handpicked_data/test/BIAF_2026-09-2.arrow          | Bin [31m0[m -> [32m34114[m bytes
+ handpicked_data/test/CVKD_2026-08-31.arrow         | Bin [31m0[m -> [32m34114[m bytes
+ handpicked_data/test/DH_2026-09-2.arrow            | Bin [31m0[m -> [32m33338[m bytes
+ handpicked_data/test/GPRO_2026-09-01.arrow         | Bin [31m0[m -> [32m34114[m bytes
+ handpicked_data/test/GPRO_2026-09-2.arrow          | Bin [31m0[m -> [32m34114[m bytes
+ handpicked_data/test/LIDR_2026-09-01.arrow         | Bin [31m0[m -> [32m34114[m bytes
+ handpicked_data/test/MOBX_2026-08-31.arrow         | Bin [31m0[m -> [32m34114[m bytes
+ handpicked_data/test/NCPL_2026-09-2.arrow          | Bin [31m0[m -> [32m34114[m bytes
+ handpicked_data/test/PPBT_2026-09-2.arrow          | Bin [31m0[m -> [32m34114[m bytes
+ handpicked_data/test/RDHL_2026-08-31.arrow         | Bin [31m0[m -> [32m34114[m bytes
+ handpicked_data/test/RNXT_2026-08-31.arrow         | Bin [31m0[m -> [32m34114[m bytes
+ handpicked_data/test/VIOT_2026-09-2.arrow          | Bin [31m0[m -> [32m34114[m bytes
+ ibkr_client.py                                     | 138 [31m------[m
+ ibkr_scrapper.py                                   | 313 [32m++++++++++++++[m
+ model_trainer.ipynb                                | 361 [32m+++++++++++[m[31m-----[m
+ setup.py                                           |  18 [32m+[m[31m-[m
+ stock_bpt.py                                       |  10 [32m+[m[31m-[m
+ test/test_data_processor.py                        |   2 [32m+[m[31m-[m
+ 43 files changed, 840 insertions(+), 866 deletions(-)

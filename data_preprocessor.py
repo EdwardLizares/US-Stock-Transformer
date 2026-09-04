@@ -1,9 +1,11 @@
 import os
+from posixpath import split
 import pyarrow as pa
 import pandas as pd
 
 from tqdm import tqdm
 from pathlib import Path  
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
 from setup import AVG_VOLUME_PERIOD, RV_THRESH, MN, MX, BAR_PER_DAY, INPUT_FEATURES, DATE_RANGE, SPLIT, DEBUG
 from setup import path_data_filler, path_data_preprocessor
@@ -109,6 +111,11 @@ def filter_data(df: pd.DataFrame, pbar = None) -> pd.DataFrame:
     ibkr_nan_mask = (df.groupby(["Tk", "date"])["ibkr_rv"].transform("count")
                      < BAR_PER_DAY)
     df = df[~ibkr_nan_mask]
+    ibkr_rv_mask = (
+        df.groupby(["Tk", "date"])["ibkr_rv"].transform("max")
+        >= RV_THRESH
+    )
+    df = df[ibkr_rv_mask]
 
     print("After RV filter:",
         df.groupby(["Tk", "date"]).ngroups,
@@ -116,7 +123,38 @@ def filter_data(df: pd.DataFrame, pbar = None) -> pd.DataFrame:
 
     return df
 
-def preprocess_data(source_folder: str, output_folder: str, date_range, split = [0.75, 0.9]):
+def preprocess_file(file_path, output_folder, split, split_names, train_end = None, val_end = None):
+    output_paths = {split_name: output_folder/ split_name / file_path.with_suffix(".arrow").name
+                    for split_name in split_names}
+    if all(path.exists() for path in output_paths.values()):
+        return
+
+    df = pd.read_parquet(file_path)
+    df = engineer_data(df, None)
+    df = filter_data(df, None)
+    df = df.sort_values(["date", "Tk", "bar"])
+    df = df[INPUT_FEATURES+["Tk", "date", "ibkr_rv"]]
+
+    float_cols = df.select_dtypes(include=["float64"]).columns
+    df[float_cols] = df[float_cols].astype("float32")
+
+    if split == [0,0]:
+        split_dfs = {"test": df}
+    else:
+        split_dfs = {"train": df[df["date"] <= train_end],
+                    "val": df[(df["date"] > train_end) & (df["date"] < val_end)],
+                    "test": df[df["date"] >= val_end]}
+
+    for split_name, split_df in split_dfs.items():
+        output_path = output_paths[split_name]
+        if output_path.exists():
+            continue
+        table = pa.Table.from_pandas(split_df, preserve_index=False)
+        with pa.OSFile(str(output_path), "wb") as sink:
+            with pa.ipc.new_file(sink, table.schema) as writer:
+                writer.write_table(table)
+
+def preprocess_data(source_folder, output_folder, date_range, set_pbar=True, split=[0.75, 0.9], file_path=None):    
     """
     Takes a folder with raw parquet files and splits each folder by date into train-val-test folders
     """
@@ -136,51 +174,31 @@ def preprocess_data(source_folder: str, output_folder: str, date_range, split = 
     for split_name in split_names:
         (output_folder / split_name).mkdir(parents=True, exist_ok=True)
 
-    file_paths = sorted(Path(source_folder).glob("*.parquet"))
+    file_paths = sorted(Path(source_folder).glob("*.parquet")) if file_path is None else [Path(file_path)]
     pbar = tqdm(file_paths, f"Setting up...".ljust(80),
-                bar_format="|{bar}| {percentage:3.1f}% ({elapsed}) {desc}")
-    for imputed_batch_path in pbar:
-        output_paths = {
-            split_name: output_folder/ split_name / imputed_batch_path.with_suffix(".arrow").name
-            for split_name in split_names
+                bar_format="|{bar}| {percentage:3.1f}% ({elapsed}) {desc}") if set_pbar else None
+
+    with ProcessPoolExecutor(max_workers=2) as executor:
+        futures = {
+            executor.submit(preprocess_file, file_path, output_folder, split, split_names, train_end, val_end): file_path
+            for file_path in file_paths
         }
-        if all(path.exists() for path in output_paths.values()):
-            pbar.write(f"{imputed_batch_path} has already been preprocessed...")
-            continue
+        for future in as_completed(futures):
+            file_path = futures[future]
+            try:
+                future.result()
+                if pbar is not None:
+                    pbar.update(1)
+                    pbar.write(f"Completed {file_path.name}...".ljust(80))
+            except Exception as e:
+                if pbar is not None:
+                    pbar.write(f"Error processing {file_path}: {e}")
+                raise
 
-        pbar.set_description(f"Reading source path parquet at {str(imputed_batch_path)}...".ljust(80))
-        df = pd.read_parquet(imputed_batch_path)
-
-        df = engineer_data(df, pbar)
-        df = filter_data(df, pbar)
-        df = df.sort_values(["date", "Tk", "bar"])
-        df = df[INPUT_FEATURES+["Tk", "date", "ibkr_rv"]]
-
-        float_cols = df.select_dtypes(include=["float64"]).columns
-        df[float_cols] = df[float_cols].astype("float32")
-
-        if split == [0,0]:
-            split_dfs = {"test": df}
-        else:
-            split_dfs = {"train": df[df["date"] <= train_end],
-                        "val": df[(df["date"] > train_end) & (df["date"] < val_end)],
-                        "test": df[df["date"] >= val_end]}
-
-        for split_name, split_df in split_dfs.items():
-            output_path = output_paths[split_name]
-            if output_path.exists():
-                pbar.write(f"{output_path} already exists...")
-                continue
-            pbar.set_description(f"Saving {output_path}...".ljust(80))
-            table = pa.Table.from_pandas(split_df, preserve_index=False)
-
-            with pa.OSFile(str(output_path), "wb") as sink:
-                with pa.ipc.new_file(sink, table.schema) as writer:
-                    writer.write_table(table)
-
-    if DEBUG:
-        pbar.set_description("Data preprocessing complete")
-
+    if pbar is not None:
+        if DEBUG:
+            pbar.set_description("Data preprocessing complete")
+    
 def debug():
     path = "preprocessed_data/data_5min_2025/train/batch0.arrow"
     with pa.memory_map(path, "r") as source:
@@ -222,6 +240,6 @@ def refilter_arrow_files(source_folder, output_folder):
                     writer.write_table(table)
 
 if __name__ == "__main__":
-    #preprocess_data(path_data_filler, path_data_preprocessor, DATE_RANGE, SPLIT)
+    preprocess_data(path_data_filler, path_data_preprocessor, DATE_RANGE, SPLIT)
     #print(debug())
-    refilter_arrow_files("preprocessed_data/10p/data_1min_2021_2026", "preprocessed_data/data_1min_2021_2026")
+    #refilter_arrow_files("preprocessed_data/10p/data_1min_2021_2026", "preprocessed_data/data_1min_2021_2026")

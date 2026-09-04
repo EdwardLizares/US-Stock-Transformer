@@ -7,4 +7,6 @@ Notes/
 archived_scripts/
 stock_app/
 results/
+handpicked_data/
+duckdb_temp/
 __pycache__/
