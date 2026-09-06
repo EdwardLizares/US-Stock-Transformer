@@ -7,7 +7,7 @@ from pathlib import Path
 
 from setup import INPUT_FEATURES, TARGET_FEATURES, BATCH_SIZE, NUM_WORKERS, PERSISTENT_WORKERS, FILE_LIMIT, STEP, BAR_PER_DAY
 from setup import path_data_preprocessor
-from stock_dataset import StockDataset
+from stock_bpt.stock_dataset import StockDataset
 def calculate_training_norms(source_folder, input_features, target_features, 
                              file_limit=FILE_LIMIT, step=STEP, bar_per_day=BAR_PER_DAY):
     """

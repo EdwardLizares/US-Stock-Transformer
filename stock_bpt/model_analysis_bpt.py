@@ -4,7 +4,7 @@ import pandas as pd
 
 from pathlib import Path
 
-from model_training import eval_loss
+from stock_bpt.model_training_bpt import eval_loss
 
 def process_losses(losses: list[dict], key = "MAE Loss"):
     return [loss_dict[key] for loss_dict in losses]

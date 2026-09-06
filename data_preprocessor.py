@@ -45,8 +45,14 @@ def calculate_additional_hyperparameters(df: pd.DataFrame, pbar = None) -> pd.Da
     df["macd"] = (df["ema12"]-df["ema26"])
     df["rv"] = df["v"] / df["av"]
 
-    #n_o = df.groupby("T_1")["o"].shift(-1)
-    #df["y"] = (n_o > df["c"]).astype(int)
+    daily_close = (df.groupby(["Tk", "date"])["c"]
+                   .last().rename("daily_close").reset_index())
+    daily_close["prev_close"] = (daily_close.groupby("Tk")["daily_close"].shift(1))
+    df = df.merge(daily_close[["Tk", "date", "prev_close"]],
+                  on=["Tk", "date"], how="left")
+
+    df["gp"] = (df["c"] / df["prev_close"]) - 1
+    df = df.drop(columns=["prev_close"])
 
     df["bar"] = df.groupby(["Tk", "date"]).cumcount() + 1
     df.insert(df.columns.get_loc("date") + 1, "bar", df.pop("bar"))
@@ -133,7 +139,7 @@ def preprocess_file(file_path, output_folder, split, split_names, train_end = No
     df = engineer_data(df, None)
     df = filter_data(df, None)
     df = df.sort_values(["date", "Tk", "bar"])
-    df = df[INPUT_FEATURES+["Tk", "date", "ibkr_rv"]]
+    df = df[INPUT_FEATURES+["Tk", "date"]]
 
     float_cols = df.select_dtypes(include=["float64"]).columns
     df[float_cols] = df[float_cols].astype("float32")
@@ -146,6 +152,7 @@ def preprocess_file(file_path, output_folder, split, split_names, train_end = No
                     "test": df[df["date"] >= val_end]}
 
     for split_name, split_df in split_dfs.items():
+        print(df)
         output_path = output_paths[split_name]
         if output_path.exists():
             continue
@@ -178,7 +185,7 @@ def preprocess_data(source_folder, output_folder, date_range, set_pbar=True, spl
     pbar = tqdm(file_paths, f"Setting up...".ljust(80),
                 bar_format="|{bar}| {percentage:3.1f}% ({elapsed}) {desc}") if set_pbar else None
 
-    with ProcessPoolExecutor(max_workers=2) as executor:
+    with ProcessPoolExecutor(max_workers=1) as executor:
         futures = {
             executor.submit(preprocess_file, file_path, output_folder, split, split_names, train_end, val_end): file_path
             for file_path in file_paths

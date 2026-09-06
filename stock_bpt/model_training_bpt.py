@@ -23,7 +23,6 @@ def batch_loss(x, y, model):
 
     return -dist.log_prob(y_norm).mean()
 
-
 def eval_loss(data_loader, model, device, max_batches = float("inf"), pbar = None, desc="") -> dict: 
     """
     Returns a dict of MAE loss and Negative Log Loss

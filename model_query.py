@@ -3,7 +3,7 @@ import torch
 from pathlib import Path
 
 from setup import StockBPT_cfg
-from stock_bpt import StockBPT
+from stock_bpt.stock_bpt import StockBPT
 
 def setup_model(source_model: Path):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

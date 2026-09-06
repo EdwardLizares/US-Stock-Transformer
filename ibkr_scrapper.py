@@ -253,6 +253,7 @@ def fetch_processed_data(ticker, date):
 
     # Keep your original IBKR RV calculation.
     df["ibkr_rv"] = df["v"].cumsum() / avg_volume
+    df["gp"] = (df["c"] / df["c"].iloc[0] - 1) * 100
 
     if len(df) != 390:
         raise ValueError(

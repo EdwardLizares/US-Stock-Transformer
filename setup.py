@@ -1,13 +1,14 @@
 import pandas_market_calendars as mcal
 
 DEBUG = True
+MPT = True
 API_KEY = "sdpbiDy3nfhuvQX2SBBtL6Gt2dl88ZrU"
 YEAR_START = "2021"
 YEAR_END = "2026"
 DATE_RANGE = mcal.get_calendar("NYSE").schedule(f"{YEAR_START}-08-01",f"{YEAR_END}-12-31").index
 
 AVG_VOLUME_PERIOD = 90                                                  # 
-RV_THRESH = 0.75
+RV_THRESH = 2
 MN = 1                                                                  # Pre-culls tickers for price
 MX = 20     
 
@@ -19,7 +20,7 @@ PRESETS = {
         "bar_per_day": 390,
         "bar_width": 1,
         "n_transformers": 4,
-        "file_limit": 50
+        "file_limit": 183
     },
     5: {
         "file_name": f"data_5min_{YEAR_START}_{YEAR_END}",
@@ -52,20 +53,22 @@ path_data_filler = f"filled_raw_data/{PRESETS[ID]['file_name']}"        #*Output
 # Data Preprocessor ------------------------------------------------------------------------------------
 BAR_PER_DAY = PRESETS[ID]["bar_per_day"]
 
-path_data_preprocessor = f"preprocessed_data/{PRESETS[ID]['file_name']}"       #*Output path of data_preprocessor
+path_data_preprocessor = f"preprocessed_data/{PRESETS[ID]['file_name']}_{RV_THRESH}"       #*Output path of data_preprocessor
 
 # Dataloader Builder -------------------------------------------------------------------------------------- 
 
 SPLIT = [0.75, 0.9, 1]
-BATCH_SIZE = 256
+BATCH_SIZE = 128
 NUM_WORKERS = 2
 PERSISTENT_WORKERS = True
 INPUT_FEATURES = ["bar", "vw", "ema9", "ema20", "macd", "o", "h", "l", "c",
-                  "n", "rv", "f"]
-TARGET_FEATURES = ["o", "h", "l", "c"]
+                  "n", "rv", "ibkr_rv", "gp", "f"]
+#TARGET_FEATURES = ["o", "h", "l", "c"] #BPT
+TARGET_FEATURES = ["down", "flat", "up"] #MPT
+TARGET_WEIGHTS = "111"
 
 # Stock GPT -----------------------------------------------------------------------------------------
-STEP = 1                            #! FUTURE HORIZON
+STEP = 10                            #! FUTURE HORIZON
 SEQ_LEN = BAR_PER_DAY - STEP
 OUTPUT_DIM = 256
 DGF = 2.25                          #* Degrees of Freedom for Student-t
@@ -86,12 +89,30 @@ StockBPT_cfg = {
     "file_limit": PRESETS[ID]["file_limit"]
 }
 
-LinearModel_cfg = {
-    "name": f"LinearModel-v{ID}{STEP}-{DGF}-{RV_THRESH}-{VERSION}",
-    "checkpoint_path": f"model_parameters/checkpoint_linear_model_v{ID}{STEP}-{DGF}-{RV_THRESH}-{VERSION}",
-    "best_path": f"model_parameters/best_linear_model_v{ID}{STEP}-{DGF}-{RV_THRESH}-{VERSION}",
+StockMPT_cfg = {
+    "name": f"StockMPT-v{ID}{STEP}-{TARGET_WEIGHTS}-{RV_THRESH}-{VERSION}",
+    "checkpoint_path": f"model_parameters/checkpoint_stock_mpt_v{ID}{STEP}-{TARGET_WEIGHTS}-{RV_THRESH}-{VERSION}",
+    "best_path": f"model_parameters/best_stock_mpt_v{ID}{STEP}-{TARGET_WEIGHTS}-{RV_THRESH}-{VERSION}",
     "input_features": INPUT_FEATURES,
     "target_features": TARGET_FEATURES,
+    "target_weights": [1.0, 1.0, 1.0],
+    "bar_per_day": BAR_PER_DAY,
+    "seq_len": SEQ_LEN,
+    "output_dim": OUTPUT_DIM,
+    "n_heads": 4,
+    "n_transformers": PRESETS[ID]["n_transformers"],
+    "qkv_bias": False,
+    "step": STEP,
+    "file_limit": PRESETS[ID]["file_limit"]
+}
+
+LinearModel_cfg = {
+    "name": f"LinearModel-v{ID}{STEP}-{TARGET_WEIGHTS}-{RV_THRESH}-{VERSION}",
+    "checkpoint_path": f"model_parameters/checkpoint_linear_model_v{ID}{STEP}-{TARGET_WEIGHTS}-{RV_THRESH}-{VERSION}",
+    "best_path": f"model_parameters/best_linear_model_v{ID}{STEP}-{TARGET_WEIGHTS}-{RV_THRESH}-{VERSION}",
+    "input_features": INPUT_FEATURES,
+    "target_features": TARGET_FEATURES,
+    "target_weights": [1.0, 1.0, 1.0],
     "seq_len": SEQ_LEN,
     "output_dim": OUTPUT_DIM,
     "step": STEP,
