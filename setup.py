@@ -17,7 +17,8 @@ PRESETS = {
     1: {
         "file_name": f"data_1min_{YEAR_START}_{YEAR_END}",
         "timeframe": "1/minute",
-        "bar_per_day": 390,
+        "rth_bars": 390,
+        "pm_bars": 30,
         "bar_width": 1,
         "n_transformers": 4,
         "file_limit": 183
@@ -51,7 +52,8 @@ BAR_WIDTH = PRESETS[ID]["bar_width"]                                    # OHLC B
 path_data_filler = f"filled_raw_data/{PRESETS[ID]['file_name']}"        #*Output path of data_filler_db.py
 
 # Data Preprocessor ------------------------------------------------------------------------------------
-BAR_PER_DAY = PRESETS[ID]["bar_per_day"]
+RTH_BARS = PRESETS[ID]["rth_bars"]
+PM_BARS = PRESETS[ID]["pm_bars"]
 
 path_data_preprocessor = f"preprocessed_data/{PRESETS[ID]['file_name']}_{RV_THRESH}"       #*Output path of data_preprocessor
 
@@ -62,14 +64,14 @@ BATCH_SIZE = 128
 NUM_WORKERS = 2
 PERSISTENT_WORKERS = True
 INPUT_FEATURES = ["bar", "vw", "ema9", "ema20", "macd", "o", "h", "l", "c",
-                  "n", "rv", "ibkr_rv", "gp", "f"]
+                  "n", "ibkr_rv", "gp", "f"] # removed old rv
 #TARGET_FEATURES = ["o", "h", "l", "c"] #BPT
 TARGET_FEATURES = ["down", "flat", "up"] #MPT
 TARGET_WEIGHTS = "111"
 
 # Stock GPT -----------------------------------------------------------------------------------------
-STEP = 10                            #! FUTURE HORIZON
-SEQ_LEN = BAR_PER_DAY - STEP
+STEP = 1                            #! FUTURE HORIZON
+SEQ_LEN = RTH_BARS + PM_BARS - STEP
 OUTPUT_DIM = 256
 DGF = 2.25                          #* Degrees of Freedom for Student-t
 
@@ -79,7 +81,7 @@ StockBPT_cfg = {
     "best_path": f"model_parameters/best_stock_bpt_v{ID}{STEP}-{DGF}-{RV_THRESH}-{VERSION}",
     "input_features": INPUT_FEATURES,
     "target_features": TARGET_FEATURES,
-    "bar_per_day": BAR_PER_DAY,
+    "bar_per_day": RTH_BARS,
     "seq_len": SEQ_LEN,
     "output_dim": OUTPUT_DIM,
     "n_heads": 4,
@@ -96,7 +98,8 @@ StockMPT_cfg = {
     "input_features": INPUT_FEATURES,
     "target_features": TARGET_FEATURES,
     "target_weights": [1.0, 1.0, 1.0],
-    "bar_per_day": BAR_PER_DAY,
+    "rth_bars": RTH_BARS,
+    "pm_bars": PM_BARS,
     "seq_len": SEQ_LEN,
     "output_dim": OUTPUT_DIM,
     "n_heads": 4,
@@ -113,6 +116,8 @@ LinearModel_cfg = {
     "input_features": INPUT_FEATURES,
     "target_features": TARGET_FEATURES,
     "target_weights": [1.0, 1.0, 1.0],
+    "rth_bars": RTH_BARS,
+    "pm_bars": PM_BARS,
     "seq_len": SEQ_LEN,
     "output_dim": OUTPUT_DIM,
     "step": STEP,
@@ -123,6 +128,8 @@ NaiveModel_cfg = {
     "name": f"NaiveModel-B{PRESETS[ID]['bar_width']}_{VERSION}",
     "input_features": INPUT_FEATURES,
     "target_features": TARGET_FEATURES,
+    "rth_bars": RTH_BARS,
+    "pm_bars": PM_BARS,
     "file_limit": PRESETS[ID]["file_limit"]
 }
 

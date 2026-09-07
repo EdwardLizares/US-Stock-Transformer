@@ -2,12 +2,13 @@ import os
 from posixpath import split
 import pyarrow as pa
 import pandas as pd
+import numpy as np
 
 from tqdm import tqdm
 from pathlib import Path  
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
-from setup import AVG_VOLUME_PERIOD, RV_THRESH, MN, MX, BAR_PER_DAY, INPUT_FEATURES, DATE_RANGE, SPLIT, DEBUG
+from setup import AVG_VOLUME_PERIOD, RV_THRESH, MN, MX, RTH_BARS, PM_BARS, INPUT_FEATURES, DATE_RANGE, SPLIT, DEBUG
 from setup import path_data_filler, path_data_preprocessor
 
 class ProcessingError(Exception):
@@ -16,34 +17,37 @@ class ProcessingError(Exception):
 def calculate_additional_hyperparameters(df: pd.DataFrame, pbar = None) -> pd.DataFrame:
     if pbar is not None:
         pbar.set_description("Doing some feature engineering...".ljust(80))
-    df = df.sort_values(["Tk", "t"])
+
+    tk_groups = df.groupby(["Tk"])
+
     df["av"] = (
-        df.groupby("Tk")["v"].transform(
+        tk_groups["v"].transform(
             lambda x: x.rolling(AVG_VOLUME_PERIOD).mean()
             )
-        )
+        ).astype("float32")
     df["ema9"] = (
-        df.groupby("Tk")["c"].transform(
+        tk_groups["c"].transform(
             lambda x: x.ewm(span=9, adjust=False).mean()
         )
-    )
+    ).astype("float32")
     df["ema20"] = (
-        df.groupby("Tk")["c"].transform(
+        tk_groups["c"].transform(
             lambda x: x.ewm(span=20, adjust=False).mean()
         )
-    )
+    ).astype("float32")
     df["ema12"] = (
-        df.groupby("Tk")["c"].transform(
+        tk_groups["c"].transform(
             lambda x: x.ewm(span=12, adjust=False).mean()
         )
-    )
+    ).astype("float32")
     df["ema26"] = (
-        df.groupby("Tk")["c"].transform(
+        tk_groups["c"].transform(
             lambda x: x.ewm(span=26, adjust=False).mean()
         )
-    )
-    df["macd"] = (df["ema12"]-df["ema26"])
-    df["rv"] = df["v"] / df["av"]
+    ).astype("float32")
+    df["macd"] = (df["ema12"]-df["ema26"]).astype("float32")
+    df["rv"] = (df["v"] / df["av"]).astype("float32")
+    df.drop(columns=["ema12", "ema26", "av"], inplace=True)
 
     daily_close = (df.groupby(["Tk", "date"])["c"]
                    .last().rename("daily_close").reset_index())
@@ -51,19 +55,17 @@ def calculate_additional_hyperparameters(df: pd.DataFrame, pbar = None) -> pd.Da
     df = df.merge(daily_close[["Tk", "date", "prev_close"]],
                   on=["Tk", "date"], how="left")
 
-    df["gp"] = (df["c"] / df["prev_close"]) - 1
+    df["gp"] = ((df["c"] / df["prev_close"]) - 1).astype("float32")
     df = df.drop(columns=["prev_close"])
 
-    df["bar"] = df.groupby(["Tk", "date"]).cumcount() + 1
-    df.insert(df.columns.get_loc("date") + 1, "bar", df.pop("bar"))
-
+    times = pd.to_datetime(df["t"], unit="ms", utc=True).dt.tz_convert("America/New_York")
+    df["bar"] = times.dt.hour * 60 + times.dt.minute - (9 * 60 + 30) + 1
     return df
 
 def calculate_ibkr_rv(df: pd.DataFrame, pbar=None) -> pd.DataFrame:
     if pbar is not None:
         pbar.set_description("Calculating IBKR RV...".ljust(80))
 
-    df = df.sort_values(["Tk", "t"])
     daily_volume = (
         df.groupby(["Tk", "date"])["v"].sum()
         .rename("daily_v").reset_index()
@@ -73,60 +75,76 @@ def calculate_ibkr_rv(df: pd.DataFrame, pbar=None) -> pd.DataFrame:
         daily_volume.groupby("Tk")["daily_v"].transform(
             lambda x: x.shift(1).rolling(90).mean()
         )
-    )
+    ).astype("float32")
 
     df = df.merge(daily_volume[["Tk", "date", "avg_daily_v"]], 
                   on=["Tk", "date"], how="left")
     
+    df = df.sort_values(["Tk", "t"])
     df["cum_v"] = (df.groupby(["Tk", "date"])["v"].cumsum())
-    df["ibkr_rv"] = (df["cum_v"] / df["avg_daily_v"])
+    df["ibkr_rv"] = (df["cum_v"] / df["avg_daily_v"]).astype("float32")
+    df.drop(columns=["cum_v", "avg_daily_v"], inplace=True)
+    return df
+
+def calculate_ibkr_rvol(df, pbar = None):
+    # 1-minute close-to-close log returns, reset each day
+    prev_c = df.groupby(["Tk","date"])["c"].shift(1)
+    ret = np.log(df["c"] / prev_c).fillna(0)
+
+    rvol30 = ret.groupby(df["Tk"]).transform(
+        lambda x: x.rolling(30, min_periods=30).std()
+    )
+    
+    # One historical volatility observation per ticker-day
+    day_rvol30 = rvol30.groupby([df["Tk"],df["date"]]).mean()
+
+    # Historical normal = previous 90 ticker-days only
+    avg_rvol30 = day_rvol30.groupby(level=0).transform(
+        lambda x: x.shift(1).rolling(90, min_periods=90).mean()
+    )
+
+    # Broadcast daily historical baseline back onto minute rows
+    baseline = pd.MultiIndex.from_arrays([df["Tk"],df["date"]]).map(avg_rvol30)
+
+    df["ibkr_rvol"] = (rvol30 / baseline).astype("float32")
     return df
 
 def engineer_data(df: pd.DataFrame, pbar = None) -> pd.DataFrame:
     df = calculate_additional_hyperparameters(df, pbar)
     df = calculate_ibkr_rv(df, pbar)
+    df = calculate_ibkr_rvol(df, pbar)
+    #counts = df.groupby(["Tk", "date"]).size()
+    #print(counts.describe())
+    #print(counts.value_counts().head())
     return df
 
-def filter_data(df: pd.DataFrame, pbar = None) -> pd.DataFrame:
-    """
-    Filters data
-    Current: 10% range, Price 1-20, Rv>tresh
-    """
+def filter_data(df: pd.DataFrame, pbar=None) -> pd.DataFrame:
     if pbar is not None:
         pbar.set_description("Filtering data...".ljust(80))
 
-    #* Range filter
-    day_low = df.groupby(["Tk", "date"])["l"].transform("min")
-    day_high = df.groupby(["Tk", "date"])["h"].transform("max")
-    range_mask = ((day_high - day_low) / day_low) >= 0.10
-    df = df[range_mask]
+    g = df.groupby(["Tk", "date"])
 
-    #* Price filter
-    pc_mask = ((df.groupby(["Tk", "date"])["l"].transform("min")<=MX) &
-               (df.groupby(["Tk", "date"])["h"].transform("min")>=MN))
-    df = df[pc_mask]
+    day_low = g["l"].transform("min")
+    day_high = g["h"].transform("max")
+    day_min_high = g["h"].transform("min")
+    rv_count = g["rv"].transform("count")
+    ibkr_rv_count = g["ibkr_rv"].transform("count")
+    max_ibkr_rv = g["ibkr_rv"].transform("max")
+    ibkr_rvol_count = g["ibkr_rvol"].transform("count")
 
-    nan_mask = (df.groupby(["Tk", "date"])["rv"].transform("count") < BAR_PER_DAY)
-    df = df[~nan_mask]
-
-    #* Rv filter
-    print("Before RV filter:",
-        df.groupby(["Tk", "date"]).ngroups,
-        len(df))
-
-    ibkr_nan_mask = (df.groupby(["Tk", "date"])["ibkr_rv"].transform("count")
-                     < BAR_PER_DAY)
-    df = df[~ibkr_nan_mask]
-    ibkr_rv_mask = (
-        df.groupby(["Tk", "date"])["ibkr_rv"].transform("max")
-        >= RV_THRESH
+    base_mask = (
+        (((day_high - day_low) / day_low) >= 0.10)
+        & (day_low <= MX)
+        & (day_min_high >= MN)
+        & (rv_count >= RTH_BARS + PM_BARS)
+        & (ibkr_rv_count >= RTH_BARS + PM_BARS)
+        & (ibkr_rvol_count >= RTH_BARS + PM_BARS)
     )
-    df = df[ibkr_rv_mask]
 
-    print("After RV filter:",
-        df.groupby(["Tk", "date"]).ngroups,
-        len(df))
+    before_rv = df[base_mask].groupby(["Tk", "date"]).ngroups
+    df = df[base_mask & (max_ibkr_rv >= RV_THRESH)]
 
+    print(f"IBKR_RV Filter: {df.groupby(['Tk', 'date']).ngroups}/{before_rv}")
     return df
 
 def preprocess_file(file_path, output_folder, split, split_names, train_end = None, val_end = None):
@@ -136,14 +154,28 @@ def preprocess_file(file_path, output_folder, split, split_names, train_end = No
         return
 
     df = pd.read_parquet(file_path)
+    print(f"Loaded: {df.memory_usage(deep=True).sum() / 1024**3:.2f} GB")
+    float_cols = df.select_dtypes(include=["float64"]).columns
+    df[float_cols] = df[float_cols].astype("float32")
+    print(f"Loaded: {df.memory_usage(deep=True).sum() / 1024**3:.2f} GB")
     df = engineer_data(df, None)
+    print(f"Loaded: {df.memory_usage(deep=True).sum() / 1024**3:.2f} GB")
+
+    pm = df[(df["bar"] >= -29) & (df["bar"] <= 0) & (df["f"] == 0)]
+    actual_pm_days = pm[["Tk", "date"]].drop_duplicates().shape[0]
+    total_days = df[["Tk", "date"]].drop_duplicates().shape[0]
+    print(f"\nPremarket Data: {actual_pm_days}/{total_days} ticker-days")
+
     df = filter_data(df, None)
+    print(f"Loaded: {df.memory_usage(deep=True).sum() / 1024**3:.2f} GB")
+
     df = df.sort_values(["date", "Tk", "bar"])
     df = df[INPUT_FEATURES+["Tk", "date"]]
 
     float_cols = df.select_dtypes(include=["float64"]).columns
     df[float_cols] = df[float_cols].astype("float32")
 
+    print(df)
     if split == [0,0]:
         split_dfs = {"test": df}
     else:
@@ -152,7 +184,6 @@ def preprocess_file(file_path, output_folder, split, split_names, train_end = No
                     "test": df[df["date"] >= val_end]}
 
     for split_name, split_df in split_dfs.items():
-        print(df)
         output_path = output_paths[split_name]
         if output_path.exists():
             continue
@@ -185,7 +216,7 @@ def preprocess_data(source_folder, output_folder, date_range, set_pbar=True, spl
     pbar = tqdm(file_paths, f"Setting up...".ljust(80),
                 bar_format="|{bar}| {percentage:3.1f}% ({elapsed}) {desc}") if set_pbar else None
 
-    with ProcessPoolExecutor(max_workers=1) as executor:
+    with ProcessPoolExecutor(max_workers=2) as executor:
         futures = {
             executor.submit(preprocess_file, file_path, output_folder, split, split_names, train_end, val_end): file_path
             for file_path in file_paths
@@ -230,14 +261,10 @@ def refilter_arrow_files(source_folder, output_folder):
                 table = reader.read_all()
 
             df = table.to_pandas()
-            daily_max_rv = df.groupby(["Tk", "date"])["rv"].max()
-            print(daily_max_rv.describe(
-                percentiles=[.01, .05, .1, .25, .5, .75, .9, .95, .99]
-            ))
             df = filter_data(df)
 
             output_path = split_output / file_path.name
-            table = pa.Table.from_pandas(
+            table = pa.Table.from_pandasa(
                 df,
                 preserve_index=False
             )

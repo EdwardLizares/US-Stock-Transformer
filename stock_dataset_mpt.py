@@ -5,11 +5,11 @@ import numpy as np
 from torch.utils.data import Dataset, get_worker_info
 from pathlib import Path
 
-from setup import StockBPT_cfg as cfg
+from setup import StockMPT_cfg as cfg
 
 class StockDatasetMPT(Dataset):
     def __init__(self, source_folder, file_limit = cfg["file_limit"], seq_len: int = cfg["seq_len"],
-                 step: int = cfg["step"], bar_per_day = cfg["bar_per_day"],
+                 step: int = cfg["step"], rth_bars = cfg["rth_bars"], pm_bars = cfg["pm_bars"],
                  input_features: list = cfg["input_features"], target_features: list = cfg["target_features"]):
         """
         Converts a folder of arrow files into a dataset
@@ -21,12 +21,12 @@ class StockDatasetMPT(Dataset):
         self.input_features = input_features
         self.target_features = target_features
 
-        self.seq_len = seq_len
         self.step = step
-        self.bar_per_day = bar_per_day
-
-        #* Number of windows produced by one ticker-day
-        self.samples_per_day = (bar_per_day - seq_len - step + 1)
+        self.rth_bars = rth_bars
+        self.pm_bars = pm_bars
+        self.total_bars = rth_bars + pm_bars
+        self.seq_len = self.total_bars - step
+        self.samples_per_day = 1
 
         self.files = sorted(self.source_folder.glob("*.arrow"))[:file_limit]
 
@@ -38,7 +38,7 @@ class StockDatasetMPT(Dataset):
                     reader.get_batch(i).num_rows for i in range(reader.num_record_batches)
                 )
 
-            n_days = n_rows // self.bar_per_day
+            n_days = n_rows // self.total_bars
             self.samples_per_file.append(n_days * self.samples_per_day)
 
         self.offsets = np.cumsum([0] + self.samples_per_file)
@@ -66,10 +66,10 @@ class StockDatasetMPT(Dataset):
     def __getitem__(self, idx):
         file_idx = np.searchsorted(self.offsets, idx, side="right") - 1
         local_idx = idx - self.offsets[file_idx]
-        day_idx = local_idx // self.samples_per_day
-        window_idx = local_idx % self.samples_per_day
 
-        row_start = day_idx * self.bar_per_day + window_idx
+        day_idx = local_idx
+        row_start = day_idx * self.total_bars
+
         self._load_file(file_idx)
 
         x_table = self.cached_table.slice(row_start, self.seq_len)
@@ -81,11 +81,14 @@ class StockDatasetMPT(Dataset):
 
         future = y_table["c"].to_numpy().astype(np.float32, copy=False)
         current = x_table["c"].to_numpy().astype(np.float32, copy=False)
+
         change = future - current
 
         y = np.ones(self.seq_len, dtype=np.int64)
         y[change <= -0.02] = 0
         y[change >= 0.02] = 2
+
+        y = y[self.pm_bars:]
 
         return torch.from_numpy(x), torch.from_numpy(y)
 

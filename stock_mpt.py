@@ -108,6 +108,7 @@ class StockMPT(torch.nn.Module):
     def __init__(self, cfg, train_norms = None):
         super().__init__()
         self.cfg = cfg
+        self.pm_bars = cfg["pm_bars"]
         self.checkpoint_path = cfg["checkpoint_path"]
         self.best_path = cfg["best_path"]
         self.input_proj = torch.nn.Linear(len(cfg["input_features"]), cfg["output_dim"])
@@ -132,6 +133,7 @@ class StockMPT(torch.nn.Module):
         x = self.input_proj(x)
         x = self.transformer_blocks(x)
         x = self.final_norm(x)
+        x = x[:, self.pm_bars:, :]
         return self.out_head(x)
 
 class LinearModel(torch.nn.Module):
@@ -149,8 +151,9 @@ class LinearModel(torch.nn.Module):
         self.out_head = torch.nn.Linear(cfg["output_dim"], len(cfg["target_features"]), False)
 
     def forward(self, x):
-        x = ( x - self.input_mean ) / self.input_std
+        x = (x - self.input_mean) / self.input_std
         x = self.linear_layer(x)
+        x = x[:, self.cfg["pm_bars"]:, :]
         return self.out_head(x)
 
 class NaiveModel(torch.nn.Module):
@@ -167,4 +170,4 @@ class NaiveModel(torch.nn.Module):
         logits[:, 1:, 0][change <= -0.02] = 1
         logits[:, 1:, 1][change.abs() < 0.02] = 1
         logits[:, 1:, 2][change >= 0.02] = 1
-        return logits
+        return logits[:, self.cfg["pm_bars"]:, :]

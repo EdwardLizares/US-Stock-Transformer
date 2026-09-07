@@ -182,7 +182,11 @@ def scrape_data(api_key:str, output_folder: str, batch_size,
 from pathlib import Path
 
 if __name__ == "__main__":
-    #print(pd.read_parquet("raw_data/data_1min_2021_2021/batch_000.parquet"))
+    print(pd.read_parquet("raw_data/data_1min_2021_2026/batch_000.parquet"))
+
+"""
+if __name__ == "__main__":
+    print(pd.read_parquet("raw_data/data_1min_2021_2021/batch_000.parquet"))
     all_tickers = get_all_tickers(path_raw_all_tickers, API_KEY)
     print(len(all_tickers))
     all_tickers_trimmed = filter_ticker_list_by_price_range(path_raw_tickers_trimmed,
@@ -198,4 +202,4 @@ if __name__ == "__main__":
         batch_size = 50,
         time_frame=TIMEFRAME,
     )
-
+"""
