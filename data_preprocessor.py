@@ -109,10 +109,38 @@ def calculate_ibkr_rvol(df, pbar = None):
     df["ibkr_rvol"] = (rvol30 / baseline).astype("float32")
     return df
 
+def calculate_ibkr_rr(df: pd.DataFrame, pbar=None) -> pd.DataFrame:
+    if pbar is not None:
+        pbar.set_description("Calculating IBKR RR...".ljust(80))
+
+    daily_range = (
+        df.groupby(["Tk", "date"])
+        .agg(daily_h=("h", "max"), daily_l=("l", "min"), daily_c=("c", "last"))
+        .reset_index()
+    )
+    daily_range["daily_r"] = (daily_range["daily_h"] - daily_range["daily_l"]) / daily_range["daily_c"]
+    daily_range = daily_range.sort_values(["Tk", "date"])
+    daily_range["avg_daily_r"] = (
+        daily_range.groupby("Tk")["daily_r"].transform(
+            lambda x: x.shift(1).rolling(90).mean()
+        )
+    ).astype("float32")
+
+    df = df.merge(daily_range[["Tk", "date", "avg_daily_r"]],
+                  on=["Tk", "date"], how="left")
+
+    df = df.sort_values(["Tk", "t"])
+    g = df.groupby(["Tk", "date"])
+    df["cum_h"] = g["h"].cummax()
+    df["cum_l"] = g["l"].cummin()
+    df["cum_r"] = (df["cum_h"] - df["cum_l"]) / df["c"]
+    df["ibkr_rr"] = (df["cum_r"] / df["avg_daily_r"]).astype("float32")
+    df.drop(columns=["cum_h", "cum_l", "cum_r", "avg_daily_r"], inplace=True)
+    return df
+
 def engineer_data(df: pd.DataFrame, pbar = None) -> pd.DataFrame:
     df = calculate_additional_hyperparameters(df, pbar)
     df = calculate_ibkr_rv(df, pbar)
-    df = calculate_ibkr_rvol(df, pbar)
     #counts = df.groupby(["Tk", "date"]).size()
     #print(counts.describe())
     #print(counts.value_counts().head())
@@ -126,19 +154,16 @@ def filter_data(df: pd.DataFrame, pbar=None) -> pd.DataFrame:
 
     day_low = g["l"].transform("min")
     day_high = g["h"].transform("max")
-    day_min_high = g["h"].transform("min")
     rv_count = g["rv"].transform("count")
     ibkr_rv_count = g["ibkr_rv"].transform("count")
     max_ibkr_rv = g["ibkr_rv"].transform("max")
-    ibkr_rvol_count = g["ibkr_rvol"].transform("count")
 
     base_mask = (
-        (((day_high - day_low) / day_low) >= 0.10)
+        (((day_high - day_low) / day_low) >= 0.05)
         & (day_low <= MX)
-        & (day_min_high >= MN)
+        & (day_high >= MN)
         & (rv_count >= RTH_BARS + PM_BARS)
         & (ibkr_rv_count >= RTH_BARS + PM_BARS)
-        & (ibkr_rvol_count >= RTH_BARS + PM_BARS)
     )
 
     before_rv = df[base_mask].groupby(["Tk", "date"]).ngroups
@@ -147,13 +172,7 @@ def filter_data(df: pd.DataFrame, pbar=None) -> pd.DataFrame:
     print(f"IBKR_RV Filter: {df.groupby(['Tk', 'date']).ngroups}/{before_rv}")
     return df
 
-def preprocess_file(file_path, output_folder, split, split_names, train_end = None, val_end = None):
-    output_paths = {split_name: output_folder/ split_name / file_path.with_suffix(".arrow").name
-                    for split_name in split_names}
-    if all(path.exists() for path in output_paths.values()):
-        return
-
-    df = pd.read_parquet(file_path)
+def preprocess_dataframe(df, apply_filter = True):
     print(f"Loaded: {df.memory_usage(deep=True).sum() / 1024**3:.2f} GB")
     float_cols = df.select_dtypes(include=["float64"]).columns
     df[float_cols] = df[float_cols].astype("float32")
@@ -166,16 +185,28 @@ def preprocess_file(file_path, output_folder, split, split_names, train_end = No
     total_days = df[["Tk", "date"]].drop_duplicates().shape[0]
     print(f"\nPremarket Data: {actual_pm_days}/{total_days} ticker-days")
 
-    df = filter_data(df, None)
-    print(f"Loaded: {df.memory_usage(deep=True).sum() / 1024**3:.2f} GB")
+    if apply_filter:
+        df = filter_data(df, None)
+        print(f"Loaded: {df.memory_usage(deep=True).sum() / 1024**3:.2f} GB")
 
     df = df.sort_values(["date", "Tk", "bar"])
     df = df[INPUT_FEATURES+["Tk", "date"]]
 
     float_cols = df.select_dtypes(include=["float64"]).columns
     df[float_cols] = df[float_cols].astype("float32")
+    return df
 
-    print(df)
+
+def preprocess_file(file_path, output_folder, split, split_names, train_end = None, val_end = None):
+    output_paths = {split_name: output_folder/ split_name / file_path.with_suffix(".arrow").name
+                    for split_name in split_names}
+    if all(path.exists() for path in output_paths.values()):
+        return
+
+    df = pd.read_parquet(file_path)
+    df = preprocess_dataframe(df)
+    
+    print(df[['v', 'ibkr_rv', 'rv', 'Tk']])
     if split == [0,0]:
         split_dfs = {"test": df}
     else:

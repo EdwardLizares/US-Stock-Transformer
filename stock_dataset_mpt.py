@@ -82,15 +82,33 @@ class StockDatasetMPT(Dataset):
         future = y_table["c"].to_numpy().astype(np.float32, copy=False)
         current = x_table["c"].to_numpy().astype(np.float32, copy=False)
 
-        change = future - current
+        change = (future - current) # / current
+
+        constant_threshold = 0.01
+        percent_threshold = 0.01  # 0.1%
 
         y = np.ones(self.seq_len, dtype=np.int64)
-        y[change <= -0.02] = 0
-        y[change >= 0.02] = 2
+        y[change < -constant_threshold] = 0
+        y[change > constant_threshold] = 2
 
         y = y[self.pm_bars:]
 
         return torch.from_numpy(x), torch.from_numpy(y)
+
+    def get_metadata(self, idx):
+        file_idx = np.searchsorted(self.offsets, idx, side="right") - 1
+        local_idx = idx - self.offsets[file_idx]
+        day_idx = local_idx
+
+        row_start = day_idx * self.total_bars
+        self._load_file(file_idx)
+
+        table = self.cached_table.slice(row_start, self.total_bars)
+
+        return {
+            "Tk": table["Tk"][0].as_py(),
+            "date": table["date"][0].as_py()
+        }
 
     def __del__(self):
         if self.cached_source is not None:

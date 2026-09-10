@@ -8,9 +8,9 @@ YEAR_END = "2026"
 DATE_RANGE = mcal.get_calendar("NYSE").schedule(f"{YEAR_START}-08-01",f"{YEAR_END}-12-31").index
 
 AVG_VOLUME_PERIOD = 90                                                  # 
-RV_THRESH = 2
+RV_THRESH = 4
 MN = 1                                                                  # Pre-culls tickers for price
-MX = 20     
+MX = 10     
 
 ID = 1
 PRESETS = {
@@ -21,7 +21,7 @@ PRESETS = {
         "pm_bars": 30,
         "bar_width": 1,
         "n_transformers": 4,
-        "file_limit": 183
+        "file_limit": 30
     },
     5: {
         "file_name": f"data_5min_{YEAR_START}_{YEAR_END}",
@@ -64,21 +64,23 @@ BATCH_SIZE = 128
 NUM_WORKERS = 2
 PERSISTENT_WORKERS = True
 INPUT_FEATURES = ["bar", "vw", "ema9", "ema20", "macd", "o", "h", "l", "c",
-                  "n", "ibkr_rv", "gp", "f"] # removed old rv
+                  "n", "ibkr_rv", "v", "rv", "gp", "f"] # removed old rv and bar
 #TARGET_FEATURES = ["o", "h", "l", "c"] #BPT
 TARGET_FEATURES = ["down", "flat", "up"] #MPT
 TARGET_WEIGHTS = "111"
 
 # Stock GPT -----------------------------------------------------------------------------------------
-STEP = 1                            #! FUTURE HORIZON
+SEED = 1
+STEP = 5                            #! FUTURE HORIZON
+CONTEXT_WINDOW = 450
 SEQ_LEN = RTH_BARS + PM_BARS - STEP
 OUTPUT_DIM = 256
 DGF = 2.25                          #* Degrees of Freedom for Student-t
 
 StockBPT_cfg = {
-    "name": f"StockGPT-v{ID}{STEP}-{DGF}-{RV_THRESH}-{VERSION}",
-    "checkpoint_path": f"model_parameters/checkpoint_stock_bpt_v{ID}{STEP}-{DGF}-{RV_THRESH}-{VERSION}",
-    "best_path": f"model_parameters/best_stock_bpt_v{ID}{STEP}-{DGF}-{RV_THRESH}-{VERSION}",
+    "name": f"StockGPT-v{ID}{STEP}-{DGF}-{RV_THRESH}-{FILE_LIMIT}",
+    "checkpoint_path": f"model_parameters/checkpoint_stock_bpt_v{ID}{STEP}-{DGF}-{RV_THRESH}-{FILE_LIMIT}",
+    "best_path": f"model_parameters/best_stock_bpt_v{ID}{STEP}-{DGF}-{RV_THRESH}-{FILE_LIMIT}",
     "input_features": INPUT_FEATURES,
     "target_features": TARGET_FEATURES,
     "bar_per_day": RTH_BARS,
@@ -92,15 +94,17 @@ StockBPT_cfg = {
 }
 
 StockMPT_cfg = {
-    "name": f"StockMPT-v{ID}{STEP}-{TARGET_WEIGHTS}-{RV_THRESH}-{VERSION}",
-    "checkpoint_path": f"model_parameters/checkpoint_stock_mpt_v{ID}{STEP}-{TARGET_WEIGHTS}-{RV_THRESH}-{VERSION}",
-    "best_path": f"model_parameters/best_stock_mpt_v{ID}{STEP}-{TARGET_WEIGHTS}-{RV_THRESH}-{VERSION}",
+    "name": f"StockMPT-v{ID}{STEP}-{RV_THRESH}-5-{FILE_LIMIT}-s{SEED}",
+    "checkpoint_path": f"model_parameters/checkpoint_stock_mpt_v{ID}{STEP}-{RV_THRESH}-5-{FILE_LIMIT}-s{SEED}",
+    "best_path": f"model_parameters/best_stock_mpt_v{ID}{STEP}-{RV_THRESH}-5-{FILE_LIMIT}-s{SEED}",
     "input_features": INPUT_FEATURES,
     "target_features": TARGET_FEATURES,
     "target_weights": [1.0, 1.0, 1.0],
+    "dropout": 0.05,
     "rth_bars": RTH_BARS,
     "pm_bars": PM_BARS,
     "seq_len": SEQ_LEN,
+    "context_window": CONTEXT_WINDOW,
     "output_dim": OUTPUT_DIM,
     "n_heads": 4,
     "n_transformers": PRESETS[ID]["n_transformers"],
@@ -110,9 +114,9 @@ StockMPT_cfg = {
 }
 
 LinearModel_cfg = {
-    "name": f"LinearModel-v{ID}{STEP}-{TARGET_WEIGHTS}-{RV_THRESH}-{VERSION}",
-    "checkpoint_path": f"model_parameters/checkpoint_linear_model_v{ID}{STEP}-{TARGET_WEIGHTS}-{RV_THRESH}-{VERSION}",
-    "best_path": f"model_parameters/best_linear_model_v{ID}{STEP}-{TARGET_WEIGHTS}-{RV_THRESH}-{VERSION}",
+    "name": f"LinearModel-v{ID}{STEP}-{RV_THRESH}-5-{FILE_LIMIT}-s{SEED}",
+    "checkpoint_path": f"model_parameters/checkpoint_linear_model_v{ID}{STEP}-{RV_THRESH}-5-{FILE_LIMIT}-s{SEED}",
+    "best_path": f"model_parameters/best_linear_model_v{ID}{STEP}-{RV_THRESH}-5-{FILE_LIMIT}-s{SEED}",
     "input_features": INPUT_FEATURES,
     "target_features": TARGET_FEATURES,
     "target_weights": [1.0, 1.0, 1.0],
@@ -125,7 +129,7 @@ LinearModel_cfg = {
 }
 
 NaiveModel_cfg = {
-    "name": f"NaiveModel-B{PRESETS[ID]['bar_width']}_{VERSION}",
+    "name": f"NaiveModel-B{PRESETS[ID]['bar_width']}_{FILE_LIMIT}",
     "input_features": INPUT_FEATURES,
     "target_features": TARGET_FEATURES,
     "rth_bars": RTH_BARS,

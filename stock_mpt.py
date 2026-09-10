@@ -46,26 +46,43 @@ class RoPE(torch.nn.Module):
         return q, k
 
 class MultiheadAttention(torch.nn.Module):
-    def __init__(self, in_dim, out_dim, num_heads, qkv_bias, seq_len):
+    def __init__(self, in_dim, out_dim, num_heads, qkv_bias, seq_len, context_window):
         super().__init__()
         assert out_dim % num_heads == 0
         self.out_dim = out_dim
         self.num_heads = num_heads
         self.head_dim = out_dim // num_heads
+        self.context_window = context_window
         assert self.head_dim % 2 == 0
+
         self.W_q = torch.nn.Linear(in_dim, out_dim, qkv_bias)
         self.W_k = torch.nn.Linear(in_dim, out_dim, qkv_bias)
         self.W_v = torch.nn.Linear(in_dim, out_dim, qkv_bias)
         self.out_proj = torch.nn.Linear(out_dim, out_dim)
         self.rope = RoPE(self.head_dim, seq_len)
+
     def forward(self, x):
         bs, sql, _ = x.shape
+
         qs = self.W_q(x).view(bs, sql, self.num_heads, self.head_dim).transpose(1, 2)
         ks = self.W_k(x).view(bs, sql, self.num_heads, self.head_dim).transpose(1, 2)
         vs = self.W_v(x).view(bs, sql, self.num_heads, self.head_dim).transpose(1, 2)
+
         qs, ks = self.rope(qs, ks)
-        context = func.scaled_dot_product_attention(qs, ks, vs, is_causal=True)
-        return self.out_proj(context.transpose(1, 2).contiguous().view(bs, sql, self.out_dim))
+
+        i = torch.arange(sql, device=x.device)[:, None]
+        j = torch.arange(sql, device=x.device)[None, :]
+        attn_mask = (j <= i) & (j >= i - self.context_window + 1)
+
+        context = func.scaled_dot_product_attention(
+            qs, ks, vs,
+            attn_mask=attn_mask,
+            is_causal=False
+        )
+
+        return self.out_proj(
+            context.transpose(1, 2).contiguous().view(bs, sql, self.out_dim)
+        )
 
 class LayerNorm(torch.nn.Module):
     def __init__(self, out_dim):
@@ -96,12 +113,14 @@ class StockTransformer(torch.nn.Module):
         super().__init__()
         self.norm1 = RMSNorm(cfg["output_dim"])
         self.mha = MultiheadAttention(cfg["output_dim"], cfg["output_dim"],
-                                      cfg["n_heads"], cfg["qkv_bias"], cfg["seq_len"])
+                                      cfg["n_heads"], cfg["qkv_bias"], cfg["seq_len"], cfg["context_window"])
         self.norm2 = RMSNorm(cfg["output_dim"])
         self.ff = SwiGLU(cfg["output_dim"])
+        self.dropout = torch.nn.Dropout(cfg["dropout"])
+
     def forward(self, x):
-        x = x + self.mha(self.norm1(x))
-        x = x + self.ff(self.norm2(x))
+        x = x + self.dropout(self.mha(self.norm1(x)))
+        x = x + self.dropout(self.ff(self.norm2(x)))
         return x
 
 class StockMPT(torch.nn.Module):
@@ -116,7 +135,11 @@ class StockMPT(torch.nn.Module):
             *[StockTransformer(cfg) for _ in range(cfg["n_transformers"])]
         )
         self.final_norm = RMSNorm(cfg["output_dim"])
-        self.out_head = torch.nn.Linear(cfg["output_dim"], len(cfg["target_features"]), False)
+        self.out_head = torch.nn.Sequential(
+            torch.nn.Linear(cfg["output_dim"], cfg["output_dim"], False),
+            torch.nn.GELU(),
+            torch.nn.Linear(cfg["output_dim"], len(cfg["target_features"]), False)
+        )
 
         if train_norms is None:
             train_norms = (
@@ -127,14 +150,17 @@ class StockMPT(torch.nn.Module):
         self.register_buffer("input_mean", train_norms[0])
         self.register_buffer("input_std", train_norms[1])
 
-    def forward(self, x):
-        _, sql, _ = x.shape            #! This is for later making predictions off bs=1, sql<25
+    def forward(self, x, return_hidden = False):
         x = ( x - self.input_mean ) / self.input_std
         x = self.input_proj(x)
         x = self.transformer_blocks(x)
         x = self.final_norm(x)
-        x = x[:, self.pm_bars:, :]
-        return self.out_head(x)
+        h = x[:, self.pm_bars:, :]
+        logits = self.out_head(h)
+
+        if return_hidden:
+            return logits, h
+        return logits
 
 class LinearModel(torch.nn.Module):
     """

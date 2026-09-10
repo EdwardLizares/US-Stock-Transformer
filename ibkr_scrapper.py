@@ -255,15 +255,15 @@ def fetch_processed_data(ticker, date):
     df["ibkr_rv"] = df["v"].cumsum() / avg_volume
     df["gp"] = (df["c"] / df["c"].iloc[0] - 1) * 100
 
-    if len(df) != 390:
+    if len(df) != 420:
         raise ValueError(
-            f"Expected 390 processed bars for {ticker} on {date.date()}, "
+            f"Expected 420 processed bars for {ticker} on {date.date()}, "
             f"got {len(df)}."
         )
 
     cols = [
         col
-        for col in INPUT_FEATURES + ["Tk", "date", "ibkr_rv"]
+        for col in INPUT_FEATURES + ["Tk", "date"]
         if col in df.columns
     ]
 
@@ -312,3 +312,4 @@ def handpick_data_by_date():
 
 if __name__ == "__main__":
     handpick_data_by_date()
+    #print(pd.read_parquet("handpicked_data/CVKD_2026-08-31."))

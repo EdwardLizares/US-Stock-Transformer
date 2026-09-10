@@ -190,6 +190,31 @@ def evaluate_best_model(model, device, optimizer, cuda_scaler, scheduler, train_
     else:
         raise FileNotFoundError("Best parameters of the model could not be found")
 
+def save_iid_stats(model, device, train_dl, max_bars=500_000):
+    model.eval()
+    hidden_list = []
+
+    with torch.inference_mode():
+        for x, _ in train_dl:
+            x = x.to(device, non_blocking=True)
+            _, h = model(x, return_hidden=True)
+            h = h.reshape(-1, h.shape[-1]).float().cpu()
+            hidden_list.append(h)
+
+            if sum(t.shape[0] for t in hidden_list) >= max_bars:
+                break
+
+    train_hidden = torch.cat(hidden_list, dim=0)[:max_bars]
+    mean = train_hidden.mean(dim=0)
+    cov = torch.cov(train_hidden.T)
+    cov += 1e-5 * torch.eye(cov.shape[0])
+    cov_inv = torch.linalg.pinv(cov)
+
+    torch.save({
+        "mean": mean,
+        "cov_inv": cov_inv
+    }, model.best_path + "_iid.pt")
+
 def train_model_cuda(model, device, optimizer, cuda_scaler, scheduler, max_epochs,
                      train_dl, val_dl, eval_bs):
     #* LOADS MODEL
@@ -283,6 +308,8 @@ def train_model_cuda(model, device, optimizer, cuda_scaler, scheduler, max_epoch
     finally:
         pbar.close()
 
+    load_model(model.best_path, model, device)
+    save_iid_stats(model, device, train_dl)
     print("Finished")
     return train_losses, val_losses
 
